@@ -1,1 +1,5 @@
 .idea/
+output/
+.env
+.env.*
+!.env.example

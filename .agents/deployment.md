@@ -1,0 +1,84 @@
+# Деплой через Coolify
+
+## Початкова топологія
+
+Проєкт має розгортатися як Docker Compose application у Coolify.
+Під час реалізації додай `deploy/compose.yaml` і окремі multi-stage Dockerfile
+для backend та frontend. У Compose вкажи build contexts і Dockerfile paths
+відносно розташування Compose. Перевір реальний build у Coolify.
+
+| Сервіс | Призначення | Доступ |
+| --- | --- | --- |
+| `frontend` | Next.js production server, standalone output | Публічний HTTPS через proxy |
+| `backend` | ASP.NET Core API, webhook, inbox/outbox workers | `/api/*` і webhook через proxy |
+| `postgres` | Дані, сесії, inbox/outbox | Лише приватна Docker network |
+| `migrate` | Одноразові EF Core migrations | Deployment job, без публічного порту |
+
+Один публічний origin, наприклад `https://expenses.example.com`:
+
+- `/api/*` → backend; цей маршрут має вищий пріоритет за frontend catch-all.
+- `/telegram/webhook` → backend із перевіркою webhook secret.
+- решта маршрутів → frontend.
+
+Домен у прикладі є placeholder. Налаштуй точні domain/path rules відповідно
+до поточної версії Coolify/proxy й перевір, що API ніколи не потрапляє до
+Next.js catch-all. Зовнішній TLS завершує Coolify proxy. Не публікуй БД.
+
+## Конфігурація
+
+Додай `.env.example` лише з безпечними placeholders та описом обов'язкових
+змінних. Секрети задаються в Coolify environment/secrets, не комітяться й
+не вбудовуються в image layers або frontend bundle.
+
+Початкові групи конфігурації:
+
+- ASP.NET Core environment, PostgreSQL connection string.
+- Telegram bot token, окремий webhook secret, bot username, публічний Mini App URL.
+- Публічний origin, довірені proxy, строки auth proof/session/draft.
+- Захищене сховище ASP.NET Core Data Protection keys.
+- PostgreSQL credentials; моніторинг і рівень logging без персональних payloads.
+
+Версії runtime, SDK, NuGet/npm пакетів і container base images фіксуй;
+не використовуй `latest`. Node.js має бути сумісним із вибраною Next.js.
+Lockfiles обов'язкові; frontend build використовує frozen install / `npm ci`.
+
+## Запуск і міграції
+
+1. Перевір Compose config, build images, потрібні secrets та доступність БД.
+2. Перед зміною схеми переконайся, що є придатна резервна копія.
+3. Один deployment job застосовує міграції до готової БД; лише успішне
+   завершення дозволяє запустити нову версію backend.
+4. Запусти backend і frontend та перевір readiness через публічний origin.
+5. Окремою явною deployment-дією зареєструй Telegram webhook і Mini App URL.
+   Не викликай `setWebhook` на старті кожної replica. Реєстрація не повинна
+   неявно очищати pending updates.
+6. Перевір вхід із Telegram, сценарій витрати та його відображення в обох каналах.
+
+Не виконуй `Database.Migrate()` конкурентно при старті всіх replicas.
+Не покладайся лише на Compose `depends_on` як на перевірку готовності БД.
+Якщо вибраний режим Coolify не підтримує deployment gate для `migrate`,
+реалізуй окремий контрольований крок release, перш ніж запускати застосунок.
+
+## Надійність та експлуатація
+
+- Health endpoints backend: `/api/health/live` без залежності від БД,
+  `/api/health/ready` із перевіркою необхідних залежностей. Відповіді не
+  розкривають connection strings, версії схеми або інші внутрішні дані.
+- Docker healthchecks для сервісів, restart policy та graceful shutdown.
+  Передавай CancellationToken; зупинка worker не має втрачати inbox/outbox.
+- Контейнери запускаються без root, де це підтримано runtime. Фінансові
+  дані не зберігаються у файловій системі ephemeral containers.
+- Persistent volumes для PostgreSQL і Data Protection keys; автоматичні
+  резервні копії зберігаються поза хостом. Перевіряй відновлення.
+- Початково одна backend replica. Масштабування вимагає спільних keys,
+  коректного locking/claiming inbox/outbox і конкурентного контролю діалогів.
+- Міграції мають зберігати сумісність під час оновлення. Rollback image
+  не відкочує БД; плануй expand/contract для несумісних змін.
+- Спостерігай за readiness, помилками auth, затримкою та backlog inbox/outbox,
+  failed jobs і помилками Telegram. Використовуй correlation IDs без секретів.
+- Локальне середовище й production використовують різні БД, bot tokens
+  і webhook secrets. Telegram дозволяє один webhook на бота; локальний
+  tunnel або polling не має перехоплювати production updates.
+
+Деплой не вважається перевіреним лише тому, що Docker images зібралися:
+потрібні HTTPS, правильний routing, cookie/CSRF і реальний Telegram запуск.

@@ -1,8 +1,36 @@
 {
     auto_https off
     admin off
+    log {
+        output stdout
+        format filter {
+            wrap json
+            fields {
+                request>headers delete
+                request>uri delete
+                request>remote_ip delete
+                request>remote_port delete
+                request>client_ip delete
+                resp_headers delete
+            }
+        }
+    }
 }
 :8080 {
+    log {
+        output stdout
+        format filter {
+            wrap json
+            fields {
+                request>headers delete
+                request>uri delete
+                request>remote_ip delete
+                request>remote_port delete
+                request>client_ip delete
+                resp_headers delete
+            }
+        }
+    }
     # Coolify terminates TLS. The gateway is the sole public service.
     handle /internal/* {
         respond 404

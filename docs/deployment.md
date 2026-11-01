@@ -72,13 +72,14 @@ Backend стартує лише після `service_completed_successfully`. П�
 маршрутів зареєструйте webhook **окремою явною дією**:
 
 ```bash
-docker compose --project-directory . --env-file .env -f deploy/compose.yaml run --rm bot \
+docker compose --project-directory . --env-file .env -f deploy/compose.yaml run --rm -e LOG_SERVICE=bot-register bot \
   python -m expense_tracker_bot.main register-webhook
 ```
 
 Команда використовує окремий webhook secret, реєструє лише message і
 callback_query, задає menu Web App та зберігає pending updates. Не запускайте
 її для production бота з локального середовища. Один бот має один webhook.
+Окрема назва `bot-register` дає one-shot команді власний log file у bot volume.
 
 ## Smoke після release
 
@@ -92,6 +93,10 @@ callback_query, задає menu Web App та зберігає pending updates. �
   живуть 30 хвилин. Обидві мови й теми, уже відкритий Mini App після оновлення.
 
 ## Експлуатація та rollback
+
+Логи всіх сервісів надходять у Coolify Logs і persistent volumes із щоденною
+UTC gzip-ротацією. Налаштування retention, шляхи, копіювання та межі
+надійності описані в [інструкції логування](logging.md).
 
 AI: 2000 символів тексту/транскрипту, до 10 МБ / 120 секунд аудіо,
 до 10 запитів/хвилину на користувача, загальний timeout AI-обробки 75 с,

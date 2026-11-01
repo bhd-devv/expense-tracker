@@ -151,3 +151,49 @@
   обробку до Luna. API, bot DTO, фінансові інваріанти й БД сумісні,
   міграція не потрібна. У env залишається лише секретний API key.
   Чинний продуктовий контракт — [product.md](../product.md).
+
+## ADR-011: атомарне демонаповнення з окремим записом виконання
+
+- **Статус:** `accepted`, 2026-11-01.
+- **Контекст:** `/seed` має додати витрати за жовтень лише поточному actor,
+  витримати повторну доставку/конкурентні виклики й не відновлювати записи,
+  які користувач уже відредагував або видалив.
+- **Варіанти:** пошук за описом ненадійний після редагування; перевикористання
+  draft/inbox змішує різні сценарії й строки зберігання. Обрано малу таблицю
+  `DemoSeeds` з ключем `(UserId, Period)`, кількістю й UTC часом виконання.
+- **Рішення:** приватний BotActor endpoint викликає backend `DemoSeedService`.
+  User advisory lock і одна PostgreSQL transaction охоплюють перевірку
+  запису виконання, лімітів каталогів, рахунки/категорії та витрати.
+  Використовується спільний `ExpenseService.Apply`, без дублювання грошових
+  і ownership-правил у Python. Повтор повертає `createdCount=0`.
+- **Наслідки:** потрібна additive migration `AddDemoSeeds` перед backend;
+  rollback застосунку не вимагає видалення таблиці. Видалення запису виконання
+  вручну зніме захист від повторного наповнення. Звичайні витрати доступні
+  через обидва канали; bot DTO генеруються з OpenAPI. Профіль і персональні
+  дані не переписуються, AI/outbox не викликаються. Наповнення лише за явною
+  командою, без автоматичного seed у міграції або startup.
+- **Контракти:** [product.md](../product.md), [telegram.md](../telegram.md).
+- **Задача:** [демовитрати за жовтень](../tasks/seed-october-2026-11-01/README.md).
+
+## ADR-012: console logs і persistent щоденні архіви через спільний runner
+
+- **Статус:** прийнято, 2026-11-01; container/Coolify smoke ще не виконано.
+- **Контекст:** потрібні всі серверні дії та помилки в Coolify і файли зі
+  щоденною ротацією, що переживають перевипуск контейнерів.
+- **Рішення:** Python stdlib runner у runtime images синхронно дублює
+  stdout/stderr у Docker console й окремий service volume; UTC midnight
+  rotation, gzip, retention за кількістю та календарним віком. Сервіси
+  самі формують безпечні події; runner не читає Docker socket і не додає
+  зовнішньої служби. .NET logging queue чекає замість відкидання подій.
+- **Альтернативи:** різні file sinks у кожному runtime дублюють policy;
+  Docker log rotation сама не забезпечує добові архіви між redeploy.
+- **Наслідки:** Python додано у backend/frontend/gateway/PostgreSQL runtime
+  images; bot уже використовує Python. PostgreSQL base/version і data volume
+  збережені. Runner передає сигнали та exit code; Compose має init і grace
+  period. Один writer на service volume вимагає stop-first release;
+  для replicas потрібні окремі файли/volumes або collector. Файли не є
+  транзакційним audit ledger чи backup і не гарантують захист від втрати диска.
+- **Безпека:** без HTTP bodies, query, tokens, сум, нотаток і transcripts.
+  Stack locations/types зберігаються без довільних exception messages/SQL;
+  gateway filters і runner redaction додають захист. Retention початково
+  14 днів, `LOG_RETENTION_DAYS=1..365`. Докладно: [logging](../../docs/logging.md).

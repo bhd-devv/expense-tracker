@@ -95,6 +95,10 @@ Python — із вибраною aiogram 3.x. Lockfiles обов'язкові: f
   не відкочує БД; плануй expand/contract для несумісних змін.
 - Спостерігай за readiness, помилками auth, затримкою та backlog inbox/outbox,
   failed jobs і помилками Telegram. Використовуй correlation IDs без секретів.
+- Кожен сервіс дублює stdout/stderr у persistent log volume через спільний
+  runner; UTC daily gzip rotation, retention через `LOG_RETENTION_DAYS`.
+  Один writer на volume, без одночасної ротації replicas. Формат, захист
+  даних, перегляд та release-обмеження — у [logging](../docs/logging.md).
 - Локальне середовище й production використовують різні БД, bot tokens
   і webhook secrets. Telegram дозволяє один webhook на бота; локальний
   tunnel або polling не має перехоплювати production updates.

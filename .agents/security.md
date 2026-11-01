@@ -38,6 +38,13 @@ ticket store у PostgreSQL. Cookie — `HttpOnly`, `Secure`, `Path=/`, без
 змінюй лише після перевірки з `Secure` і повним CSRF-захистом. Блокування
 third-party cookies не обходь перенесенням session token до localStorage.
 
+Browser session містить `user_id` для ownership та стандартний
+`ClaimTypes.NameIdentifier` із тим самим внутрішнім User ID для ASP.NET Core
+Antiforgery. Одного власного `user_id` недостатньо для генерації CSRF-токена
+автентифікованого користувача. Захищені старі tickets без стандартного claim
+доповнюються при cookie validation та перевидаються; прострочений ticket,
+невалідний User ID або різні значення цих claims відхиляються.
+
 Початкові ліміти сесії: idle 24 години, абсолютний строк 7 діб, серверне
 відкликання на виході. Не подовжуй абсолютний строк автоматично.
 Зберігай Data Protection keys у постійному захищеному сховищі, спільному

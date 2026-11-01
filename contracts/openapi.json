@@ -1441,6 +1441,25 @@
         }
       }
     },
+    "/internal/bot/actor/seed": {
+      "post": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/bot/actor/conversation": {
       "get": {
         "tags": [
@@ -2135,6 +2154,33 @@
           "count": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "SeedResultDto": {
+        "required": [
+          "createdCount",
+          "totalCount",
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "createdCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
           }
         }
       },

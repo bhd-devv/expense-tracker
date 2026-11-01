@@ -4,8 +4,11 @@ COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 COPY src/bot/pyproject.toml src/bot/uv.lock ./
 COPY src/bot/src ./src
-RUN uv sync --frozen --no-dev --no-cache && useradd --create-home --uid 10001 bot
+RUN uv sync --frozen --no-dev --no-cache && useradd --create-home --uid 10001 bot \
+    && mkdir /logs && chown bot:bot /logs
+COPY deploy/log_runner.py /usr/local/bin/log_runner.py
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 USER bot
 EXPOSE 8081
+ENTRYPOINT ["python", "/usr/local/bin/log_runner.py"]
 CMD ["python", "-m", "expense_tracker_bot.main"]

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ExpenseTracker.Api.Features.Expenses;
 using ExpenseTracker.Api.Features.Users;
 using ExpenseTracker.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,8 @@ public static class BotEndpoints
         {
             if (input.UpdateId < 0 || input.Payload.GetRawText().Length > 65536) throw new ApiError("invalid_update");
             var key = input.UpdateId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Deliveries\" (\"Id\",\"Kind\",\"DedupeKey\",\"Payload\",\"AvailableAt\",\"Attempts\") VALUES ({Guid.NewGuid()},'inbox',{key},{input.Payload.GetRawText()},{DateTimeOffset.UtcNow},0) ON CONFLICT (\"Kind\",\"DedupeKey\") DO NOTHING", ct);
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"Deliveries\" (\"Id\",\"Kind\",\"DedupeKey\",\"Payload\",\"AvailableAt\",\"Attempts\") VALUES ({Guid.NewGuid()},'inbox',{key},{input.Payload.GetRawText()},{DateTimeOffset.UtcNow},0) ON CONFLICT (\"Kind\",\"DedupeKey\") DO NOTHING", ct);
+            app.Logger.LogInformation("Telegram update accepted updateId={UpdateId} duplicate={Duplicate}", input.UpdateId, inserted == 0);
             return Results.NoContent();
         });
         group.MapPost("/queues/{kind}/claim", async (string kind, Database db, TimeProvider clock, CancellationToken ct) =>
@@ -37,6 +39,8 @@ public static class BotEndpoints
             delivery.Attempts++;
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
+            app.Logger.LogInformation("Delivery claimed deliveryId={DeliveryId} kind={Kind} attempt={Attempt}", delivery.Id, kind, delivery.Attempts);
+            if (delivery.Attempts == 8) app.Logger.LogWarning("Delivery final attempt deliveryId={DeliveryId} kind={Kind}", delivery.Id, kind);
             return Results.Ok(new LeaseDto(delivery.Id, token, JsonSerializer.Deserialize<JsonElement>(delivery.Payload), delivery.Attempts));
         }).Produces<LeaseDto>(200).Produces(204);
         group.MapPost("/queues/{id:guid}/result", async (Guid id, LeaseResult input, Database db, TimeProvider clock, CancellationToken ct) =>
@@ -47,10 +51,14 @@ public static class BotEndpoints
                 ? await query.ExecuteUpdateAsync(set => set.SetProperty(x => x.CompletedAt, now).SetProperty(x => x.Payload, "{}"), ct)
                 : await query.ExecuteUpdateAsync(set => set.SetProperty(x => x.LeaseUntil, (DateTimeOffset?)null).SetProperty(x => x.AvailableAt, now.AddSeconds(30)), ct);
             if (changed == 0) throw new ApiError("lease_expired", 409);
+            app.Logger.Log(input.Success ? LogLevel.Information : LogLevel.Warning,
+                "Delivery result deliveryId={DeliveryId} success={Success}", id, input.Success);
             return Results.NoContent();
         });
         var actor = group.MapGroup("/actor").RequireAuthorization("BotActor");
         actor.MapWorkspace("bot");
+        actor.MapPost("/seed", async (HttpContext context, UserService users, DemoSeedService seed, CancellationToken ct) =>
+            await seed.Seed(await users.Current(context, ct), ct));
         actor.MapGet("/conversation", async (HttpContext context, UserService users, Database db, TimeProvider clock, CancellationToken ct) =>
         {
             var user = await users.Current(context, ct);
@@ -75,6 +83,7 @@ public static class BotEndpoints
             state.Version++;
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
+            app.Logger.LogInformation("Conversation updated userId={UserId} version={Version}", user.Id, state.Version);
             return new ConversationDto(state.State, state.EntityId, state.Field, state.Version);
         });
     }

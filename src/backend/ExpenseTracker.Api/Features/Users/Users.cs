@@ -8,7 +8,7 @@ public sealed record ProfileDto(Guid Id, string Language, string Theme, string T
 public sealed record PreferencesRequest(string Language, string Theme, string TimeZone, string Currency,
     Guid? DefaultAccountId, bool AiConsent, int Version);
 
-public sealed class UserService(Database db)
+public sealed class UserService(Database db, ILogger<UserService>? logger = null)
 {
     public static readonly (string Code, string Name)[] Categories =
     [
@@ -22,6 +22,7 @@ public sealed class UserService(Database db)
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({telegramId})", ct);
         var user = await db.Users.SingleOrDefaultAsync(x => x.TelegramId == telegramId, ct);
+        var created = user is null;
         if (user is null)
         {
             user = new User { TelegramId = telegramId, Language = language?.StartsWith("en", StringComparison.OrdinalIgnoreCase) == true ? "en" : "uk" };
@@ -33,6 +34,7 @@ public sealed class UserService(Database db)
             await db.SaveChangesAsync(ct);
         }
         await transaction.CommitAsync(ct);
+        if (created) logger?.LogInformation("User created userId={UserId}", user.Id);
         return user;
     }
 
@@ -61,6 +63,7 @@ public sealed class UserService(Database db)
         user.AiConsent = input.AiConsent;
         user.Version++;
         await db.SaveChangesAsync(ct);
+        logger?.LogInformation("Preferences saved userId={UserId} version={Version}", user.Id, user.Version);
         return View(user);
     }
 }

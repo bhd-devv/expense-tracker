@@ -3,8 +3,8 @@ import logging
 import secrets
 import sys
 from collections.abc import AsyncIterator
-from contextlib import suppress
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Any
 
 import httpx
@@ -19,6 +19,14 @@ from .api import Api, ApiError
 from .copy import COPY
 from .handlers import router, show_record
 from .models import LeaseDto, ProfileDto
+from .observability import (
+    TelegramLogging,
+    configure_logging,
+    context,
+    log_failure,
+    request_completed,
+    request_started,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +123,8 @@ async def worker(
 ) -> None:
     while True:
         lease: LeaseDto | None = None
+        started = monotonic()
+        token = context.set({"queue": kind})
         try:
             response = await api.call("POST", f"/queues/{kind}/claim")
             if response.status_code == 204:
@@ -122,6 +132,15 @@ async def worker(
                 continue
             lease = LeaseDto.model_validate(response.json())
             payload = lease.payload.root
+            context.set(
+                {
+                    "queue": kind,
+                    "deliveryId": str(lease.id),
+                    "updateId": payload.get("update_id"),
+                    "attempt": lease.attempts,
+                }
+            )
+            logger.info("Delivery processing started")
             if kind == "inbox":
                 await dispatcher.feed_update(
                     bot, Update.model_validate(payload), api_client=client, app_url=app_url
@@ -131,61 +150,133 @@ async def worker(
             await api.call(
                 "POST", f"/queues/{lease.id}/result", {"token": str(lease.token), "success": True}
             )
+            logger.info(
+                "Delivery completed",
+                extra={"details": {"elapsedMs": round((monotonic() - started) * 1000, 2)}},
+            )
         except asyncio.CancelledError:
+            if lease:
+                logger.warning("Delivery interrupted during shutdown; durable lease retained")
             raise
         except TelegramRetryAfter as error:
+            logger.warning(
+                "Telegram rate limited delivery",
+                extra={"details": {"retryAfterSeconds": error.retry_after}},
+            )
             await asyncio.sleep(min(error.retry_after, 60))
         except Exception as error:
-            # Log types only. Exceptions from Telegram/httpx may include token-bearing URLs.
-            logger.warning("%s delivery failed: %s", kind, type(error).__name__)
+            log_failure(logger, "Delivery failed", error)
+            if lease and lease.attempts >= 8:
+                logger.error("Delivery attempts exhausted; manual review required")
             if lease:
-                with suppress(Exception):
+                try:
                     await api.call(
                         "POST",
                         f"/queues/{lease.id}/result",
                         {"token": str(lease.token), "success": False},
                     )
+                except Exception as result_error:
+                    log_failure(logger, "Delivery failure acknowledgement failed", result_error)
             await asyncio.sleep(3)
+        finally:
+            context.reset(token)
 
 
 async def create_app(settings: Settings) -> web.Application:
     bot = Bot(settings.token)
+    bot.session.middleware(TelegramLogging())
     client = httpx.AsyncClient(
         base_url=settings.backend_url.rstrip("/") + "/",
         headers={"Authorization": "Bearer " + settings.service_key},
         timeout=httpx.Timeout(100, connect=5),
+        event_hooks={"request": [request_started], "response": [request_completed]},
     )
     api = Api(client)
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
     app = web.Application(client_max_size=65536)
 
+    @web.middleware
+    async def request_logging(request: web.Request, handler: Any) -> web.StreamResponse:
+        started = monotonic()
+        status = 500
+        try:
+            response: web.StreamResponse = await handler(request)
+            status = response.status
+            return response
+        except web.HTTPException as error:
+            status = error.status
+            raise
+        except Exception as error:
+            log_failure(logger, "Webhook request failed", error)
+            raise
+        finally:
+            logger.log(
+                logging.WARNING if status >= 400 else logging.INFO,
+                "HTTP request completed",
+                extra={
+                    "details": {
+                        "method": request.method,
+                        "route": request.match_info.route.resource.canonical
+                        if request.match_info.route.resource
+                        else "unmatched",
+                        "status": status,
+                        "elapsedMs": round((monotonic() - started) * 1000, 2),
+                    }
+                },
+            )
+
+    app.middlewares.append(request_logging)
+
     async def webhook(request: web.Request) -> web.Response:
         if not secrets.compare_digest(
             request.headers.get("X-Telegram-Bot-Api-Secret-Token", "").encode(),
             settings.webhook_secret.encode(),
         ):
+            logger.warning("Webhook secret rejected")
             raise web.HTTPForbidden()
         try:
             update = Update.model_validate(await request.json())
-        except (ValueError, ValidationError):
+        except (ValueError, ValidationError) as error:
+            log_failure(logger, "Webhook payload rejected", error)
             raise web.HTTPBadRequest() from None
         payload = minimal_update(update)
         if payload is not None:
+            token = context.set({"updateId": update.update_id})
+            logger.info(
+                "Webhook update received",
+                extra={
+                    "details": {
+                        "updateId": update.update_id,
+                        "kind": "callback" if update.callback_query else "message",
+                    }
+                },
+            )
             try:
                 # 2xx only after durable deduplicated storage. No background acknowledgement.
                 async with asyncio.timeout(8):
                     await api.call(
                         "POST", "/inbox", {"updateId": update.update_id, "payload": payload}
                     )
-            except Exception:
+                logger.info(
+                    "Webhook update stored", extra={"details": {"updateId": update.update_id}}
+                )
+            except Exception as error:
+                log_failure(
+                    logger, "Webhook durable storage failed", error, updateId=update.update_id
+                )
                 raise web.HTTPServiceUnavailable() from None
+            finally:
+                context.reset(token)
+        else:
+            logger.info("Webhook update ignored", extra={"details": {"updateId": update.update_id}})
         return web.Response(text="ok")
 
     async def health(_: web.Request) -> web.Response:
         return web.Response(text="ok")
 
     async def lifecycle(_: web.Application) -> AsyncIterator[None]:
+        logger.info("Bot started")
         tasks = [
             asyncio.create_task(worker(kind, api, bot, dispatcher, client, settings.app_url))
             for kind in ("inbox", "outbox")
@@ -193,6 +284,7 @@ async def create_app(settings: Settings) -> web.Application:
         try:
             yield
         finally:
+            logger.info("Bot stopping")
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -207,6 +299,7 @@ async def create_app(settings: Settings) -> web.Application:
 
 async def register(settings: Settings) -> None:
     async with Bot(settings.token) as bot:
+        bot.session.middleware(TelegramLogging())
         await bot.set_webhook(
             settings.app_url + "/telegram/webhook",
             secret_token=settings.webhook_secret,
@@ -218,17 +311,20 @@ async def register(settings: Settings) -> None:
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="Lime", web_app=WebAppInfo(url=settings.app_url))
         )
+        logger.info("Webhook and menu registered")
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("aiogram.event").setLevel(logging.WARNING)
-    settings = Settings()
-    if len(sys.argv) == 2 and sys.argv[1] == "register-webhook":
-        asyncio.run(register(settings))
-    else:
-        web.run_app(create_app(settings), host="0.0.0.0", port=settings.port, access_log=None)
+    configure_logging()
+    try:
+        settings = Settings()
+        if len(sys.argv) == 2 and sys.argv[1] == "register-webhook":
+            asyncio.run(register(settings))
+        else:
+            web.run_app(create_app(settings), host="0.0.0.0", port=settings.port, access_log=None)
+    except Exception as error:
+        log_failure(logger, "Bot terminated", error)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

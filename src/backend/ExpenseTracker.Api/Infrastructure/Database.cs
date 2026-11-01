@@ -107,6 +107,14 @@ public sealed class Delivery
     public int Attempts { get; set; }
 }
 
+public sealed class DemoSeed
+{
+    public Guid UserId { get; set; }
+    public DateOnly Period { get; set; }
+    public int ExpenseCount { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class Database(DbContextOptions<Database> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
@@ -118,6 +126,7 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
     public DbSet<AuthProof> AuthProofs => Set<AuthProof>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
+    public DbSet<DemoSeed> DemoSeeds => Set<DemoSeed>();
 
     // Serialize short financial/catalogue mutations for one owner. Never hold this over AI/Telegram I/O.
     public async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> LockUser(User user, CancellationToken ct)
@@ -161,5 +170,7 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
         model.Entity<Conversation>().Property(x => x.Version).IsConcurrencyToken();
         model.Entity<Delivery>().HasIndex(x => new { x.Kind, x.DedupeKey }).IsUnique();
         model.Entity<Delivery>().HasIndex(x => new { x.Kind, x.CompletedAt, x.AvailableAt });
+        model.Entity<DemoSeed>().HasKey(x => new { x.UserId, x.Period });
+        model.Entity<DemoSeed>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
     }
 }

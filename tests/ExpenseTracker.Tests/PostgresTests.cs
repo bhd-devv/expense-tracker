@@ -141,6 +141,113 @@ public sealed class PostgresTests
         Assert.Equal(1, await db.Deliveries.CountAsync(x => x.Kind == "inbox" && x.DedupeKey == updateId.ToString()));
     }
 
+    [PostgresFact]
+    public async Task OctoberSeedIsAtomicOncePerActorAndVisibleAcrossChannels()
+    {
+        await using var factory = await Factory();
+        var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
+        using var browser = await Browser(factory, telegramId);
+        using var stranger = await Browser(factory, telegramId + 1);
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bot.PostAsync("/internal/bot/actor/seed", null)).StatusCode);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        var replies = await Task.WhenAll(bot.PostAsync("/internal/bot/actor/seed", null), bot.PostAsync("/internal/bot/actor/seed", null));
+        var results = new List<SeedResultDto>();
+        foreach (var reply in replies)
+        {
+            reply.EnsureSuccessStatusCode();
+            results.Add(await reply.Content.ReadFromJsonAsync<SeedResultDto>() ?? throw new InvalidOperationException());
+        }
+        Assert.Equal(new[] { 0, 70 }, results.Select(x => x.CreatedCount).Order().ToArray());
+        Assert.All(results, result =>
+        {
+            Assert.Equal(70, result.TotalCount);
+            Assert.Equal(new DateOnly(2026, 10, 1), result.From);
+            Assert.Equal(new DateOnly(2026, 10, 31), result.To);
+        });
+        Assert.Equal(profile, await browser.GetFromJsonAsync<ProfileDto>("/api/profile"));
+        var after = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        Assert.Equal(catalog.Categories, after.Categories);
+        Assert.Equal(catalog.Accounts.Count + 4, after.Accounts.Count);
+        var seeded = new List<ExpenseDto>();
+        for (var page = 0; page < 4; page++)
+        {
+            var expenses = await browser.GetFromJsonAsync<ExpensePage>($"/api/expenses?from=2026-10-01&to=2026-10-31&page={page}") ?? throw new InvalidOperationException();
+            Assert.Equal(page < 3, expenses.HasMore);
+            seeded.AddRange(expenses.Items);
+        }
+        Assert.Equal(70, seeded.Count);
+        Assert.Equal(31, seeded.Select(x => x.Date).Distinct().Count());
+        Assert.Equal(7, seeded.Select(x => x.CategoryId).Distinct().Count());
+        Assert.All(seeded, expense =>
+        {
+            Assert.Equal("bot", expense.Source);
+            Assert.StartsWith("Демо · ", expense.Description);
+            Assert.InRange(expense.Date, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31));
+        });
+        var report = await browser.GetFromJsonAsync<ReportDto>("/api/reports?from=2026-10-01&to=2026-10-31") ?? throw new InvalidOperationException();
+        Assert.Equal(64, report.Totals.Single(x => x.Currency == "UAH").Count);
+        Assert.Equal(3, report.Totals.Single(x => x.Currency == "USD").Count);
+        Assert.Equal(3, report.Totals.Single(x => x.Currency == "EUR").Count);
+        var expense = seeded[0];
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync($"/api/expenses/{expense.Id}")).StatusCode);
+        var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}",
+            new ExpenseInput("1.25", expense.AccountId, expense.CategoryId, "Edited demo", expense.Date, expense.Version));
+        edited.EnsureSuccessStatusCode();
+        var shared = await bot.GetFromJsonAsync<ExpenseDto>($"/internal/bot/actor/expenses/{expense.Id}");
+        Assert.Equal("1.25", shared!.Amount);
+        var removed = seeded[1];
+        (await browser.DeleteAsync($"/api/expenses/{removed.Id}?version={removed.Version}")).EnsureSuccessStatusCode();
+        var retry = await (await bot.PostAsync("/internal/bot/actor/seed", null)).Content.ReadFromJsonAsync<SeedResultDto>();
+        Assert.Equal(0, retry!.CreatedCount);
+        Assert.Equal(HttpStatusCode.NotFound, (await browser.GetAsync($"/api/expenses/{removed.Id}")).StatusCode);
+        Assert.Equal("1.25", (await browser.GetFromJsonAsync<ExpenseDto>($"/api/expenses/{expense.Id}"))!.Amount);
+        Assert.Empty((await stranger.GetFromJsonAsync<ExpensePage>("/api/expenses"))!.Items);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Database>();
+        Assert.Equal(69, await db.Expenses.CountAsync(x => x.UserId == profile.Id));
+        Assert.Equal(1, await db.DemoSeeds.CountAsync(x => x.UserId == profile.Id));
+    }
+
+    [PostgresFact]
+    public async Task SeedRespectsCatalogLimitAndArchivedCategories()
+    {
+        await using var factory = await Factory();
+        var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
+        using var browser = await Browser(factory, telegramId);
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Database>();
+            db.Accounts.AddRange(Enumerable.Range(1, 46).Select(i => new Account { UserId = profile.Id, Name = $"Existing {i}" }));
+            var food = await db.Categories.SingleAsync(x => x.UserId == profile.Id && x.Code == "food");
+            food.Archived = true;
+            await db.SaveChangesAsync();
+        }
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await bot.PostAsync("/internal/bot/actor/seed", null)).StatusCode);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Database>();
+            Assert.False(await db.DemoSeeds.AnyAsync(x => x.UserId == profile.Id));
+            Assert.False(await db.Expenses.AnyAsync(x => x.UserId == profile.Id));
+            Assert.Equal(7, await db.Categories.CountAsync(x => x.UserId == profile.Id));
+            var extra = await db.Accounts.FirstAsync(x => x.UserId == profile.Id && x.Id != profile.DefaultAccountId);
+            db.Accounts.Remove(extra);
+            await db.SaveChangesAsync();
+        }
+        (await bot.PostAsync("/internal/bot/actor/seed", null)).EnsureSuccessStatusCode();
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        Assert.Equal(50, catalog.Accounts.Count);
+        Assert.Single(catalog.Categories.Where(x => x.Code == "food" && x.Archived));
+        Assert.Single(catalog.Categories.Where(x => x.Code == "food" && !x.Archived));
+    }
+
     private sealed class Clock : TimeProvider
     {
         public DateTimeOffset Now { get; set; } = new(2026, 11, 1, 21, 59, 59, TimeSpan.Zero);

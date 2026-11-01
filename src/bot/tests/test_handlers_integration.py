@@ -9,10 +9,12 @@ import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, SendMessage
-from aiogram.types import CallbackQuery, Chat, Message, Update, User
+from aiogram.types import CallbackQuery, Chat, InlineKeyboardMarkup, Message, Update, User
 
 from expense_tracker_bot.api import Api
-from expense_tracker_bot.handlers import Action, handle_callback, handle_message
+from expense_tracker_bot.copy import COPY
+from expense_tracker_bot.handlers import Action, handle_callback, handle_message, router
+from expense_tracker_bot.main import minimal_update
 from expense_tracker_bot.models import CatalogDto, ExpensePage
 
 
@@ -32,7 +34,10 @@ class FakeTelegram(BaseSession):
                 date=datetime.now(UTC),
                 chat=Chat(id=int(method.chat_id), type="private"),
                 text=getattr(method, "text", ""),
-                reply_markup=method.reply_markup,
+                # Telegram Message exposes only inline markup, never a reply keyboard.
+                reply_markup=method.reply_markup
+                if isinstance(method.reply_markup, InlineKeyboardMarkup)
+                else None,
             ).as_(bot)
         if isinstance(method, AnswerCallbackQuery):
             return True
@@ -95,4 +100,86 @@ async def test_real_backend_draft_edit_confirm_and_duplicate_callback() -> None:
         expenses = await api.get("/expenses", ExpensePage)
         assert len(expenses.items) == 1
         assert expenses.items[0].amount == "75"
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+@pytest.mark.parametrize("outcome", ["created", "exists", "limit", "timeout"])
+async def test_seed_routes_through_ingress_without_ai_or_implicit_retry(
+    language: str, outcome: str
+) -> None:
+    calls: list[httpx.Request] = []
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        assert request.headers["X-Telegram-User-Id"] == "42"
+        assert request.headers["X-Telegram-Language"] == language
+        if request.method == "GET" and request.url.path == "/internal/bot/actor/profile":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "defaultAccountId": None,
+                    "aiConsent": False,
+                    "version": 1,
+                    "today": "2026-11-01",
+                },
+            )
+        assert request.method == "POST" and request.url.path == "/internal/bot/actor/seed"
+        if outcome == "timeout":
+            raise httpx.ReadTimeout("Result unknown", request=request)
+        if outcome == "limit":
+            return httpx.Response(422, json={"code": "catalog_limit"})
+        return httpx.Response(
+            200,
+            json={
+                "createdCount": 70 if outcome == "created" else 0,
+                "totalCount": 70,
+                "from": "2026-10-01",
+                "to": "2026-10-31",
+            },
+        )
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    update = Update(
+        update_id=1,
+        message=Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=42, type="private"),
+            from_user=User(id=42, is_bot=False, first_name="Synthetic", language_code=language),
+            text="/seed",
+        ),
+    )
+    payload = minimal_update(update)
+    assert payload is not None
+    message = Update.model_validate(payload).message
+    assert message is not None
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        await router.propagate_event(
+            "message",
+            message.as_(bot),
+            bot=bot,
+            api_client=client,
+            app_url="https://example.com",
+            event_update=update,
+        )
+    assert len(calls) == 2
+    assert len(session.sent) == 1
+    response = session.sent[0]
+    assert isinstance(response, SendMessage)
+    key = {
+        "created": "seedAdded",
+        "exists": "seedExists",
+        "limit": "seedLimit",
+        "timeout": "seedUnknown",
+    }[outcome]
+    assert COPY[language][key].format(count=70) in response.text
     await bot.session.close()

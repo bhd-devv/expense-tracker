@@ -1,10 +1,12 @@
 import io
+import logging
 from datetime import date, timedelta
 from urllib.parse import urlencode
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
 from aiogram import Bot, F, Router
+from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
     CallbackQuery,
@@ -28,9 +30,12 @@ from .models import (
     ExpensePage,
     ProfileDto,
     ReportDto,
+    SeedResultDto,
 )
+from .observability import log_failure
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 class Action(CallbackData, prefix="l"):
@@ -254,6 +259,7 @@ async def settings(message: Message, api: Api, profile: ProfileDto, t: dict[str,
         )
         for field in ("language", "theme", "timeZone", "currency", "defaultAccountId", "aiConsent")
     ]
+    rows.append(button(t, "seed", "seed"))
     await message.answer(t["settings"], reply_markup=keyboard(rows, 1))
 
 
@@ -340,6 +346,37 @@ async def input_value(
         await browse(message, api, t, mode)
 
 
+async def seed_demo(message: Message, api: Api, t: dict[str, str], app_url: str) -> None:
+    try:
+        result = await api.mutate("POST", "/seed", SeedResultDto, {})
+    except ApiError as error:
+        log_failure(logger, "Demo seeding rejected", error, status=error.status)
+        key = "unavailable"
+        if error.code == "catalog_limit":
+            key = "seedLimit"
+        elif error.status >= 500:
+            key = "seedUnknown"
+        await message.answer(t[key])
+        return
+    except (httpx.HTTPError, ValueError) as error:
+        log_failure(logger, "Demo seeding failed", error)
+        await message.answer(t["seedUnknown"])
+        return
+    summary = (
+        t["seedAdded"].format(count=result.createdCount) if result.createdCount else t["seedExists"]
+    )
+    await message.answer(summary + "\n" + t["seedPeriod"], reply_markup=menu(t, app_url))
+
+
+@router.message(F.chat.type == "private", Command("seed"))
+async def handle_seed(message: Message, api_client: httpx.AsyncClient, app_url: str) -> None:
+    if not message.from_user or message.from_user.is_bot:
+        return
+    api = Api(api_client, message.from_user.id, message.from_user.language_code or "uk")
+    _, t = await profile_context(api)
+    await seed_demo(message, api, t, app_url)
+
+
 @router.message(F.chat.type == "private")
 async def handle_message(
     message: Message, api_client: httpx.AsyncClient, app_url: str, event_update: Update, bot: Bot
@@ -368,6 +405,7 @@ async def handle_message(
             None,
         )
         if text.startswith("/") or selected:
+            logger.info("Menu action", extra={"details": {"action": selected or "start"}})
             # Menu navigation preserves draft records. Old buttons still have owner/version checks.
             await state(api, selected if selected in ("expenses", "reports") else "idle")
             if selected in ("expenses", "reports"):
@@ -384,6 +422,7 @@ async def handle_message(
             return
         conversation = await api.get("/conversation", ConversationDto)
         if conversation.state in ("record", "new", "rename", "preference", "period"):
+            logger.info("Dialog input received", extra={"details": {"state": conversation.state}})
             if text:
                 await input_value(message, api, conversation, text, t, app_url)
             else:
@@ -400,6 +439,7 @@ async def handle_message(
             await message.answer(t["processing"])
             buffer = io.BytesIO()
             await bot.download(message.voice, destination=buffer, timeout=30)
+            logger.info("Voice downloaded", extra={"details": {"bytes": buffer.getbuffer().nbytes}})
             draft = DraftDto.model_validate((await api.audio(request_id, buffer.getvalue())).json())
         elif text:
             await message.answer(t["processing"])
@@ -415,6 +455,7 @@ async def handle_message(
         await state(api, "idle")
         await show_record(message, api, "d", str(draft.id), t)
     except ApiError as error:
+        log_failure(logger, "Message action rejected", error, status=error.status)
         await message.answer(
             t["stale"]
             if error.status in (404, 409)
@@ -422,7 +463,8 @@ async def handle_message(
             if error.status < 500
             else t["unavailable"]
         )
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as error:
+        log_failure(logger, "Message input rejected", error)
         await message.answer(t["error"])
 
 
@@ -442,8 +484,40 @@ async def handle_callback(
     api = Api(api_client, callback.from_user.id, callback.from_user.language_code or "uk")
     profile, t = await profile_context(api)
     data = callback_data
+    action = (
+        data.action
+        if data.action
+        in {
+            "seed",
+            "open",
+            "save",
+            "delete",
+            "remove",
+            "cancel",
+            "field",
+            "pick",
+            "reset",
+            "browse",
+            "page",
+            "period",
+            "filter",
+            "select",
+            "new",
+            "catalog",
+            "rename",
+            "archive",
+            "ccurrency",
+            "setcurrency",
+            "setting",
+            "preference",
+        }
+        else "unknown"
+    )
+    logger.info("Callback action", extra={"details": {"action": action}})
     try:
-        if data.action in ("open", "save", "delete", "remove", "cancel", "field", "pick"):
+        if data.action == "seed":
+            await seed_demo(message, api, t, app_url)
+        elif data.action in ("open", "save", "delete", "remove", "cancel", "field", "pick"):
             kind = data.field.split(".")[0]
             record = await get_record(api, kind, data.entity)
             if data.action not in ("open",) and int(record.version) != data.version:
@@ -742,6 +816,7 @@ async def handle_callback(
             await message.answer(t["welcome"], reply_markup=menu(t, app_url))
             await settings(message, api, profile, t)
     except ApiError as error:
+        log_failure(logger, "Callback action rejected", error, status=error.status)
         await message.answer(
             t["stale"]
             if error.status in (404, 409)
@@ -749,5 +824,6 @@ async def handle_callback(
             if error.status < 500
             else t["unavailable"]
         )
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as error:
+        log_failure(logger, "Callback input rejected", error)
         await message.answer(t["error"])

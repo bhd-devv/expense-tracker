@@ -21,13 +21,14 @@ public sealed class Errors(IProblemDetailsService problems, ILogger<Errors> logg
             BadHttpRequestException => ("invalid_request", 400),
             _ => ("server_error", 500)
         };
-        if (status == 500)
-            logger.LogError("Unhandled error {ExceptionType}, trace {TraceId}", exception.GetType().Name, context.TraceIdentifier);
+        logger.Log(status >= 500 ? LogLevel.Error : LogLevel.Warning,
+            "Request failed code={Code} status={Status} failure={Failure}",
+            code, status, System.Text.Json.JsonSerializer.Serialize(SafeError.Describe(exception)));
         context.Response.StatusCode = status;
         return await problems.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = context,
-            ProblemDetails = new() { Title = code, Status = status, Extensions = { ["code"] = code } }
+            ProblemDetails = new() { Title = code, Status = status, Extensions = { ["code"] = code, ["requestId"] = context.TraceIdentifier } }
         });
     }
 }

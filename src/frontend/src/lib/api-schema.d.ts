@@ -1637,6 +1637,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/internal/bot/actor/seed": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SeedResultDto"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/internal/bot/actor/conversation": {
     parameters: {
       query?: never;
@@ -1879,6 +1914,16 @@ export interface components {
       amount: string;
       /** Format: int32 */
       count: number;
+    };
+    SeedResultDto: {
+      /** Format: int32 */
+      createdCount: number;
+      /** Format: int32 */
+      totalCount: number;
+      /** Format: date */
+      from: string;
+      /** Format: date */
+      to: string;
     };
     VersionRequest: {
       /** Format: int32 */

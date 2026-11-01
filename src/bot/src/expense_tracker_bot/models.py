@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 from datetime import date as date_aliased
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel, Field, RootModel
 
 
 class CatalogItemDto(BaseModel):
@@ -158,6 +158,13 @@ class ReportTotal(BaseModel):
     currency: str
     amount: str
     count: int
+
+
+class SeedResultDto(BaseModel):
+    createdCount: int
+    totalCount: int
+    from_: Annotated[date_aliased, Field(alias="from")]
+    to: date_aliased
 
 
 class VersionRequest(BaseModel):

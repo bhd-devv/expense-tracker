@@ -7,7 +7,7 @@ public sealed record CatalogItemDto(Guid Id, string Name, string? Currency, stri
 public sealed record CatalogRequest(string Name, string? Currency, bool Archived, int Version);
 public sealed record CatalogDto(IReadOnlyList<CatalogItemDto> Accounts, IReadOnlyList<CatalogItemDto> Categories);
 
-public sealed class CatalogService(Database db)
+public sealed class CatalogService(Database db, ILogger<CatalogService>? logger = null)
 {
     public async Task<CatalogDto> List(User user, CancellationToken ct) => new(
         (await db.Accounts.AsNoTracking().Where(x => x.UserId == user.Id).OrderBy(x => x.Name).ToArrayAsync(ct))
@@ -34,6 +34,8 @@ public sealed class CatalogService(Database db)
         { user.DefaultAccountId = null; user.Version++; }
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Account saved accountId={AccountId} userId={UserId} created={Created} archived={Archived} version={Version}",
+            account.Id, user.Id, id is null, account.Archived, account.Version);
         return new(account.Id, account.Name, account.Currency, null, account.Archived, account.Version);
     }
 
@@ -51,6 +53,8 @@ public sealed class CatalogService(Database db)
         if (id is null) db.Add(category); else category.Version++;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Category saved categoryId={CategoryId} userId={UserId} created={Created} archived={Archived} version={Version}",
+            category.Id, user.Id, id is null, category.Archived, category.Version);
         return new(category.Id, category.Name, null, category.Code, category.Archived, category.Version);
     }
 }

@@ -1,12 +1,23 @@
 # Paths use the repository root, as in Coolify's --project-directory.
 # Locally: docker compose --project-directory . --env-file .env -f deploy/compose.yaml ...
 name: expense-tracker
+x-log-options: &log-options
+  LOG_DIRECTORY: /logs
+  LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+x-docker-logging: &docker-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+    mode: "blocking"
 x-backend: &backend
   image: expense-tracker-api:${RELEASE_TAG:-local}
   build:
     context: .
     dockerfile: src/backend/ExpenseTracker.Api/Dockerfile
   environment: &backend-env
+    <<: *log-options
+    LOG_SERVICE: backend
     ASPNETCORE_ENVIRONMENT: Production
     ConnectionStrings__Database: Host=postgres;Database=expenses;Username=expenses;Password=${POSTGRES_PASSWORD:?required}
     App__Origin: ${APP_ORIGIN:?required}
@@ -17,16 +28,31 @@ x-backend: &backend
     OpenRouter__ApiKey: ${OPENROUTER_API_KEY:?required}
   volumes:
     - data-protection:/keys
+    - backend-logs:/logs
   networks: [private]
+  logging: *docker-logging
+  init: true
+  stop_grace_period: 30s
 services:
   postgres:
-    image: postgres:17.6-bookworm
+    image: expense-tracker-postgres:${RELEASE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deploy/postgres.Dockerfile
     environment:
+      <<: *log-options
+      LOG_SERVICE: postgres
       POSTGRES_DB: expenses
       POSTGRES_USER: expenses
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - postgres-logs:/logs
+    # SQL text/parameters can contain private expense descriptions.
+    command: [postgres, -c, log_connections=on, -c, log_disconnections=on, -c, log_min_error_statement=panic, -c, log_parameter_max_length_on_error=0, -c, log_error_verbosity=terse]
+    logging: *docker-logging
+    init: true
+    stop_grace_period: 30s
     networks: [private]
     restart: unless-stopped
     healthcheck:
@@ -36,6 +62,12 @@ services:
       retries: 20
   migrate:
     <<: *backend
+    environment:
+      <<: *backend-env
+      LOG_SERVICE: migrate
+    volumes:
+      - data-protection:/keys
+      - migrate-logs:/logs
     command: [--migrate]
     restart: 'no'
     depends_on:
@@ -57,6 +89,14 @@ services:
     build:
       context: .
       dockerfile: src/frontend/Dockerfile
+    environment:
+      <<: *log-options
+      LOG_SERVICE: frontend
+    volumes:
+      - frontend-logs:/logs
+    logging: *docker-logging
+    init: true
+    stop_grace_period: 30s
     networks: [private]
     restart: unless-stopped
     healthcheck:
@@ -70,11 +110,18 @@ services:
       context: .
       dockerfile: src/bot/Dockerfile
     environment:
+      <<: *log-options
+      LOG_SERVICE: bot
       BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?required}
       BOT_SERVICE_KEY: ${BOT_SERVICE_KEY:?required}
       BOT_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:?required}
       BOT_BACKEND_URL: http://backend:8080/internal/bot/
       BOT_APP_URL: ${APP_ORIGIN:?required}
+    volumes:
+      - bot-logs:/logs
+    logging: *docker-logging
+    init: true
+    stop_grace_period: 30s
     networks: [private]
     restart: unless-stopped
     depends_on:
@@ -90,6 +137,14 @@ services:
     build:
       context: .
       dockerfile: deploy/gateway.Dockerfile
+    environment:
+      <<: *log-options
+      LOG_SERVICE: gateway
+    volumes:
+      - gateway-logs:/logs
+    logging: *docker-logging
+    init: true
+    stop_grace_period: 30s
     expose: [8080]
     networks:
       private:
@@ -116,3 +171,9 @@ networks:
 volumes:
   postgres-data:
   data-protection:
+  backend-logs:
+  migrate-logs:
+  bot-logs:
+  frontend-logs:
+  gateway-logs:
+  postgres-logs:

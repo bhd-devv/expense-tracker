@@ -19,7 +19,7 @@ public sealed record ReportDto(IReadOnlyList<ReportTotal> Totals, IReadOnlyList<
 public sealed record VersionRequest(int Version);
 public sealed record DraftEditRequest(string? Amount, string Description, Guid? AccountId, Guid? CategoryId, DateOnly Date, int Version);
 
-public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter ai)
+public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter ai, ILogger<ExpenseService>? logger = null)
 {
     public static ExpenseDto View(Expense x) => new(x.Id, Rules.Money(x.Amount), x.Currency, x.Description, x.Date,
         x.AccountId, x.CategoryId, x.Source, x.Version);
@@ -76,6 +76,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             if (existing is not null)
             {
                 if (existing.InputHash != inputHash) throw new ApiError("idempotency_conflict", 409);
+                logger?.LogInformation("Draft creation replayed draftId={DraftId} userId={UserId}", existing.Id, user.Id);
                 return await ViewDraft(existing, ct);
             }
             selected = accountId ?? user.DefaultAccountId;
@@ -98,6 +99,8 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
+        logger?.LogInformation("Draft created draftId={DraftId} userId={UserId} source={Source} inputKind={InputKind}",
+            draft.Id, user.Id, source, draft.InputKind);
         try
         {
             if (!user.AiConsent) throw new ApiError("ai_consent_required");
@@ -116,10 +119,17 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         {
             draft.Status = "failed";
             draft.ErrorCode = error is ApiError apiError ? apiError.Code : "ai_unavailable";
+            logger?.LogWarning("Draft processing failed draftId={DraftId} code={Code} failure={Failure}",
+                draft.Id, draft.ErrorCode, JsonSerializer.Serialize(SafeError.Describe(error)));
         }
         draft.Version++;
         try { await db.SaveChangesAsync(ct); }
-        catch (DbUpdateConcurrencyException) { db.Entry(draft).State = EntityState.Detached; }
+        catch (DbUpdateConcurrencyException)
+        {
+            logger?.LogWarning("Draft processing result superseded draftId={DraftId}", draft.Id);
+            db.Entry(draft).State = EntityState.Detached;
+        }
+        logger?.LogInformation("Draft processing finished draftId={DraftId}", draft.Id);
         return await ViewDraft(await FindDraft(user, draft.Id, ct), ct);
     }
 
@@ -134,6 +144,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             if (Rules.Amount(input.Amount, saved.Currency) != saved.Amount || input.CategoryId != saved.CategoryId
                 || input.AccountId != saved.AccountId || Rules.Text(input.Description) != saved.Description || input.Date != saved.Date)
                 throw new ApiError("idempotency_conflict", 409);
+            logger?.LogInformation("Expense confirmation replayed expenseId={ExpenseId} userId={UserId}", saved.Id, user.Id);
             return View(saved);
         }
         if (draft.Status is "cancelled" or "processing" || draft.ExpiresAt <= clock.GetUtcNow()) throw new ApiError("draft_expired", 409);
@@ -149,10 +160,11 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             db.Deliveries.Add(new Delivery { Kind = "outbox", DedupeKey = $"saved:{id}", Payload = JsonSerializer.Serialize(new { kind = "saved", telegramId = user.TelegramId, expenseId = id }) });
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Expense saved expenseId={ExpenseId} userId={UserId} source={Source}", expense.Id, user.Id, draft.Source);
         return View(expense);
     }
 
-    private async Task Apply(User user, Expense expense, ExpenseInput input, CancellationToken ct)
+    internal async Task Apply(User user, Expense expense, ExpenseInput input, CancellationToken ct)
     {
         var account = await db.Accounts.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == input.AccountId, ct) ?? throw new ApiError("invalid_account");
         var category = await db.Categories.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == input.CategoryId, ct) ?? throw new ApiError("invalid_category");
@@ -176,6 +188,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         expense.Version++;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Expense edited expenseId={ExpenseId} userId={UserId} version={Version}", expense.Id, user.Id, expense.Version);
         return View(expense);
     }
 
@@ -187,6 +200,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         db.Remove(expense);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Expense deleted expenseId={ExpenseId} userId={UserId}", id, user.Id);
     }
 
     private static void ClearContent(Draft draft)
@@ -216,6 +230,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         draft.Version++;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Draft edited draftId={DraftId} userId={UserId} version={Version}", draft.Id, user.Id, draft.Version);
         return await ViewDraft(draft, ct);
     }
 
@@ -231,6 +246,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         draft.Version++;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        logger?.LogInformation("Draft cancelled draftId={DraftId} userId={UserId}", draft.Id, user.Id);
         return await ViewDraft(draft, ct);
     }
 }

@@ -40,7 +40,7 @@ public static class WorkspaceEndpoints
             await expenses.Report(await users.Current(context, ct), from, to, categoryId, accountId, ct));
         group.MapPost("/drafts", async (CreateDraftRequest input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, input.AccountId, source, null, ct)).RequireRateLimiting("ai");
-        group.MapPost("/drafts/audio", async (HttpRequest request, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
+        group.MapPost("/drafts/audio", async (HttpRequest request, HttpContext context, UserService users, ExpenseService expenses, ILogger<OpenRouter> logger, CancellationToken ct) =>
         {
             var user = await users.Current(context, ct);
             if (!user.AiConsent) throw new ApiError("ai_consent_required");
@@ -51,7 +51,7 @@ public static class WorkspaceEndpoints
             if (!Guid.TryParse(form["requestId"], out var requestId)) throw new ApiError("invalid_request_id");
             Guid? accountId = Guid.TryParse(form["accountId"], out var account) ? account : null;
             await using var stream = file.OpenReadStream();
-            var audio = await OpenRouter.NormalizeAudio(stream, ct);
+            var audio = await OpenRouter.NormalizeAudio(stream, ct, logger);
             return await expenses.Create(user, requestId, "", accountId, source, audio, ct);
         }).DisableAntiforgery().RequireRateLimiting("ai");
         group.MapGet("/drafts/{id:guid}", async (Guid id, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>

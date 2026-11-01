@@ -30,7 +30,11 @@ public static class AuthEndpoints
             var user = await users.GetOrCreate(proof.Id, proof.Language, ct);
             if (await db.AuthProofs.AnyAsync(x => x.Id == proof.Fingerprint, ct))
             {
-                if (context.User.FindFirst("user_id")?.Value == user.Id.ToString()) return UserService.View(user);
+                if (context.User.FindFirst("user_id")?.Value == user.Id.ToString())
+                {
+                    app.Logger.LogInformation("Login replay accepted for existing session userId={UserId}", user.Id);
+                    return UserService.View(user);
+                }
                 throw new ApiError("replayed_telegram_proof", 401);
             }
             db.AuthProofs.Add(new AuthProof { Id = proof.Fingerprint, ExpiresAt = proof.ExpiresAt });
@@ -44,14 +48,18 @@ public static class AuthEndpoints
                 ExpiresUtc = clock.GetUtcNow().AddHours(24),
                 Items = { ["absolute"] = clock.GetUtcNow().AddDays(7).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) }
             };
-            var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("user_id", user.Id.ToString())], "Session"));
+            var subject = user.Id.ToString();
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim("user_id", subject), new Claim(ClaimTypes.NameIdentifier, subject)], "Session"));
             await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, properties);
+            app.Logger.LogInformation("Login succeeded userId={UserId}", user.Id);
             return UserService.View(user);
         }).RequireRateLimiting("auth");
 
         app.MapPost("/api/auth/logout", async (HttpContext context) =>
         {
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            app.Logger.LogInformation("Logout succeeded userId={UserId}", context.User.FindFirst("user_id")?.Value);
             return Results.NoContent();
         }).RequireAuthorization("Browser");
     }

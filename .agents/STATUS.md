@@ -15,5 +15,8 @@
 ## Межі впевненості
 
 Живі OpenRouter/Telegram, HTTPS у Telegram-клієнтах і Coolify ще не перевірені.
+Логування та щоденні архіви [реалізовано локально](../docs/logging.md);
+image build, Caddy runtime і права log volumes не перевірені, оскільки
+локальний Docker daemon недоступний. Перед release потрібний container smoke.
 Для наступної інтеграційної задачі потрібні тестові credentials, model IDs і
 домен. Документ не дає дозволу на деплой або реєстрацію webhook.

@@ -79,6 +79,22 @@ COPY = {
         "other": "Other",
         "overview": "Overview",
         "refresh": "Refresh",
+        "seed": "Add demo data · October 2026",
+        "seedAdded": (
+            "Added {count} demo expenses for October 2026: "
+            "4 demo accounts, 7 categories, UAH/USD/EUR."
+        ),
+        "seedExists": (
+            "Demo data for October 2026 has already been added. No new records were created."
+        ),
+        "seedPeriod": "To view them, select 2026-10-01 — 2026-10-31 in Expenses or Reports.",
+        "seedLimit": (
+            "Demo data needs 4 free account slots and up to 7 category slots "
+            "(50 total each). Nothing was added."
+        ),
+        "seedUnknown": (
+            "Could not confirm the result. Send /seed again: it will not add duplicate demo data."
+        ),
     },
     "uk": {
         "add": "➕ Додати витрату",
@@ -156,6 +172,20 @@ COPY = {
         "other": "Інше",
         "overview": "Огляд",
         "refresh": "Оновити",
+        "seed": "Додати демодані · жовтень 2026",
+        "seedAdded": (
+            "Додано {count} демовитрат за жовтень 2026: "
+            "4 деморахунки, 7 категорій, UAH/USD/EUR."
+        ),
+        "seedExists": "Демодані за жовтень 2026 уже додано. Нові записи не створено.",
+        "seedPeriod": "Для перегляду виберіть 2026-10-01 — 2026-10-31 у витратах або звітах.",
+        "seedLimit": (
+            "Потрібні 4 вільні місця для рахунків і до 7 для категорій "
+            "(ліміт — по 50). Нічого не додано."
+        ),
+        "seedUnknown": (
+            "Не вдалося підтвердити результат. Повторіть /seed: дублікати демоданих не з'являться."
+        ),
     },
 }
 CURRENCIES = ("UAH", "USD", "EUR", "GBP", "PLN", "JPY")

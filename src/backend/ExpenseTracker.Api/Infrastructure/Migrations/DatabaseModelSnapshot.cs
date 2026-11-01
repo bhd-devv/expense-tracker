@@ -162,6 +162,25 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                     b.ToTable("Deliveries");
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.DemoSeed", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Period")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExpenseCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UserId", "Period");
+
+                    b.ToTable("DemoSeeds");
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Draft", b =>
                 {
                     b.Property<Guid>("Id")
@@ -366,6 +385,15 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Conversation", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.DemoSeed", b =>
                 {
                     b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
                         .WithMany()

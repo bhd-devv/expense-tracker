@@ -28,7 +28,6 @@ import {
   Settings2,
   Square,
   Tags,
-  WalletCards,
   SlidersHorizontal,
   X,
   type LucideIcon,
@@ -64,13 +63,7 @@ import {
 } from "@/lib/i18n";
 import { telegram } from "@/lib/telegram";
 
-type Tab =
-  | "overview"
-  | "expenses"
-  | "reports"
-  | "accounts"
-  | "categories"
-  | "settings";
+type Tab = "overview" | "expenses" | "reports" | "categories" | "settings";
 type Editor =
   | { kind: "draft"; value: Draft }
   | { kind: "expense"; value: Expense };
@@ -84,7 +77,6 @@ const nav = [
   { key: "overview", Icon: House },
   { key: "expenses", Icon: ReceiptText },
   { key: "reports", Icon: ChartPie },
-  { key: "accounts", Icon: WalletCards },
   { key: "categories", Icon: Tags },
   { key: "settings", Icon: Settings2 },
 ] as const;
@@ -160,7 +152,6 @@ export default function Workspace() {
     from: "",
     to: "",
     categoryId: "",
-    accountId: "",
     page: 0,
   });
   const [recording, setRecording] = useState(false);
@@ -498,7 +489,7 @@ export default function Workspace() {
               <button
                 className="button primary"
                 onClick={() => {
-                  if (tab === "accounts" || tab === "categories") {
+                  if (tab === "categories") {
                     document.getElementById(`${tab}-name`)?.focus();
                     return;
                   }
@@ -560,11 +551,11 @@ export default function Workspace() {
             {tab === "overview" && (
               <>
                 <div className="overview-grid">
-                  <section className="balance-card">
+                  <section className="spending-card">
                     <span className="card-kicker">{t.monthSpending}</span>
                     {data.report.totals.length ? (
                       data.report.totals.map((total) => (
-                        <div key={total.currency} className="balance-value">
+                        <div key={total.currency} className="spending-value">
                           <Money
                             amount={total.amount}
                             currency={total.currency}
@@ -573,7 +564,7 @@ export default function Workspace() {
                         </div>
                       ))
                     ) : (
-                      <div className="balance-value">
+                      <div className="spending-value">
                         <Money
                           amount="0"
                           currency={profile.currency ?? "UAH"}
@@ -670,20 +661,14 @@ export default function Workspace() {
                 <summary>
                   <SlidersHorizontal size={20} strokeWidth={1.8} />
                   {t.filters}
-                  {[
-                    filters.from,
-                    filters.to,
-                    filters.categoryId,
-                    filters.accountId,
-                  ].filter(Boolean).length > 0 && (
+                  {[filters.from, filters.to, filters.categoryId].filter(
+                    Boolean,
+                  ).length > 0 && (
                     <span className="filter-count">
                       {
-                        [
-                          filters.from,
-                          filters.to,
-                          filters.categoryId,
-                          filters.accountId,
-                        ].filter(Boolean).length
+                        [filters.from, filters.to, filters.categoryId].filter(
+                          Boolean,
+                        ).length
                       }
                     </span>
                   )}
@@ -718,31 +703,26 @@ export default function Workspace() {
                       }
                     />
                   </label>
-                  {(["categoryId", "accountId"] as const).map((key) => (
-                    <label key={key}>
-                      {key === "categoryId" ? t.category : t.account}
-                      <select
-                        value={filters[key]}
-                        onChange={(e) =>
-                          setFilters({
-                            ...filters,
-                            [key]: e.target.value,
-                            page: 0,
-                          })
-                        }
-                      >
-                        <option value="">{t.all}</option>
-                        {(key === "categoryId"
-                          ? data.catalog.categories
-                          : data.catalog.accounts
-                        ).map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {categoryName(item, t)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
+                  <label>
+                    {t.category}
+                    <select
+                      value={filters.categoryId}
+                      onChange={(e) =>
+                        setFilters({
+                          ...filters,
+                          categoryId: e.target.value,
+                          page: 0,
+                        })
+                      }
+                    >
+                      <option value="">{t.all}</option>
+                      {data.catalog.categories.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {categoryName(item, t)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </details>
             )}
@@ -900,15 +880,10 @@ export default function Workspace() {
                 ))}
               </section>
             )}
-            {(tab === "accounts" || tab === "categories") && (
+            {tab === "categories" && (
               <CatalogEditor
                 key={tab}
-                kind={tab}
-                items={
-                  tab === "accounts"
-                    ? data.catalog.accounts
-                    : data.catalog.categories
-                }
+                items={data.catalog.categories}
                 t={t}
                 busy={busy}
                 perform={action}
@@ -922,7 +897,6 @@ export default function Workspace() {
               <Preferences
                 key={profile.version}
                 profile={profile}
-                catalog={data.catalog}
                 t={t}
                 busy={busy}
                 onSave={(value) =>
@@ -1008,7 +982,7 @@ function ExpenseEditor({
     amount: editor.value.amount ?? "",
     description: editor.value.description,
     date: editor.value.date,
-    accountId: editor.value.accountId ?? "",
+    currency: editor.value.currency,
     categoryId: editor.value.categoryId ?? "",
     version: editor.value.version,
   });
@@ -1085,26 +1059,38 @@ function ExpenseEditor({
           />
         </label>
         <div className="form-grid">
-          {(["accountId", "categoryId"] as const).map((key) => (
-            <label key={key}>
-              {key === "accountId" ? t.account : t.category}
-              <select
-                required
-                value={value[key]}
-                onChange={(e) => setValue({ ...value, [key]: e.target.value })}
-              >
-                <option value="">{t.choose}</option>
-                {(key === "accountId" ? catalog.accounts : catalog.categories)
-                  .filter((item) => !item.archived || item.id === value[key])
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {categoryName(item, t)}
-                      {item.currency ? ` · ${item.currency}` : ""}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          ))}
+          <label>
+            {t.currency}
+            <select
+              value={value.currency}
+              onChange={(e) => setValue({ ...value, currency: e.target.value })}
+            >
+              {currencies.map((currency) => (
+                <option key={currency}>{currency}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t.category}
+            <select
+              required
+              value={value.categoryId}
+              onChange={(e) =>
+                setValue({ ...value, categoryId: e.target.value })
+              }
+            >
+              <option value="">{t.choose}</option>
+              {catalog.categories
+                .filter(
+                  (item) => !item.archived || item.id === value.categoryId,
+                )
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {categoryName(item, t)}
+                  </option>
+                ))}
+            </select>
+          </label>
         </div>
         <label>
           {t.date}
@@ -1154,14 +1140,12 @@ function ExpenseEditor({
   );
 }
 function CatalogEditor({
-  kind,
   items,
   t,
   busy,
   perform,
   reload,
 }: {
-  kind: "accounts" | "categories";
   items: Item[];
   t: Copy;
   busy: boolean;
@@ -1170,16 +1154,14 @@ function CatalogEditor({
 }) {
   const [editing, setEditing] = useState<Item>();
   const [name, setName] = useState("");
-  const [currency, setCurrency] = useState("UAH");
   async function submit() {
     await perform(async () => {
       await request(
-        `/${kind}${editing ? `/${editing.id}` : ""}`,
+        `/categories${editing ? `/${editing.id}` : ""}`,
         itemSchema,
         editing ? "PUT" : "POST",
         {
           name,
-          currency: kind === "accounts" ? currency : null,
           archived: editing?.archived ?? false,
           version: editing?.version ?? 0,
         },
@@ -1196,15 +1178,11 @@ function CatalogEditor({
           <div className="catalog-row" key={item.id}>
             <div className="catalog-name">
               <span className="category-icon">
-                {kind === "accounts" ? (
-                  <WalletCards size={22} strokeWidth={1.8} />
-                ) : (
-                  <CategoryIcon code={item.code} />
-                )}
+                <CategoryIcon code={item.code} />
               </span>
               <div>
                 <strong>{categoryName(item, t)}</strong>
-                <small>{item.archived ? t.archived : item.currency}</small>
+                {item.archived && <small>{t.archived}</small>}
               </div>
             </div>
             <button
@@ -1215,7 +1193,6 @@ function CatalogEditor({
               onClick={() => {
                 setEditing(item);
                 setName(categoryName(item, t));
-                setCurrency(item.currency ?? "UAH");
               }}
             >
               <PencilLine size={20} strokeWidth={1.8} />
@@ -1227,7 +1204,7 @@ function CatalogEditor({
               disabled={busy}
               onClick={() =>
                 void perform(async () => {
-                  await request(`/${kind}/${item.id}`, itemSchema, "PUT", {
+                  await request(`/categories/${item.id}`, itemSchema, "PUT", {
                     ...item,
                     archived: !item.archived,
                   });
@@ -1255,26 +1232,13 @@ function CatalogEditor({
         <label>
           {t.name}
           <input
-            id={`${kind}-name`}
+            id="categories-name"
             required
             maxLength={60}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-        {kind === "accounts" && (
-          <label>
-            {t.currency}
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-            >
-              {currencies.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-        )}
         <div className="dialog-actions">
           {editing && (
             <button
@@ -1299,14 +1263,12 @@ function CatalogEditor({
 }
 function Preferences({
   profile,
-  catalog,
   t,
   busy,
   onSave,
   logout,
 }: {
   profile: Profile;
-  catalog: Catalog;
   t: Copy;
   busy: boolean;
   onSave: (value: Profile) => Promise<void>;
@@ -1378,24 +1340,6 @@ function Preferences({
             {currencies.map((c) => (
               <option key={c}>{c}</option>
             ))}
-          </select>
-        </label>
-        <label>
-          {t.defaultAccount}
-          <select
-            value={value.defaultAccountId ?? ""}
-            onChange={(e) =>
-              setValue({ ...value, defaultAccountId: e.target.value || null })
-            }
-          >
-            <option value="">{t.noDefault}</option>
-            {catalog.accounts
-              .filter((a) => !a.archived)
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} · {a.currency}
-                </option>
-              ))}
           </select>
         </label>
       </div>

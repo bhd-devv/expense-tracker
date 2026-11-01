@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, RootModel
 class CatalogItemDto(BaseModel):
     id: UUID
     name: str
-    currency: str | None
     code: str | None
     archived: bool
     version: int
@@ -21,7 +20,6 @@ class CatalogItemDto(BaseModel):
 
 class CatalogRequest(BaseModel):
     name: str
-    currency: str | None
     archived: bool
     version: int
 
@@ -43,7 +41,6 @@ class ConversationRequest(BaseModel):
 class CreateDraftRequest(BaseModel):
     requestId: UUID
     text: str
-    accountId: UUID | None
 
 
 class CsrfDto(BaseModel):
@@ -54,11 +51,10 @@ class DraftDto(BaseModel):
     id: UUID
     status: str
     amount: str | None
-    currency: str | None
+    currency: str
     description: str
     transcript: str
     date: date_aliased
-    accountId: UUID | None
     categoryId: UUID | None
     errorCode: str | None
     version: int
@@ -67,8 +63,8 @@ class DraftDto(BaseModel):
 
 class DraftEditRequest(BaseModel):
     amount: str | None
+    currency: str
     description: str
-    accountId: UUID | None
     categoryId: UUID | None
     date: date_aliased
     version: int
@@ -80,7 +76,6 @@ class ExpenseDto(BaseModel):
     currency: str
     description: str
     date: date_aliased
-    accountId: UUID
     categoryId: UUID
     source: str
     version: int
@@ -88,7 +83,7 @@ class ExpenseDto(BaseModel):
 
 class ExpenseInput(BaseModel):
     amount: str
-    accountId: UUID
+    currency: str
     categoryId: UUID
     description: str
     date: date_aliased
@@ -126,7 +121,6 @@ class PreferencesRequest(BaseModel):
     theme: str
     timeZone: str
     currency: str
-    defaultAccountId: UUID | None
     aiConsent: bool
     version: int
 
@@ -137,7 +131,6 @@ class ProfileDto(BaseModel):
     theme: str
     timeZone: str
     currency: str
-    defaultAccountId: UUID | None
     aiConsent: bool
     version: int
     today: date_aliased
@@ -172,7 +165,6 @@ class VersionRequest(BaseModel):
 
 
 class CatalogDto(BaseModel):
-    accounts: list[CatalogItemDto]
     categories: list[CatalogItemDto]
 
 

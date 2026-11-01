@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 namespace ExpenseTracker.Api.Features.Users;
 
 public sealed record ProfileDto(Guid Id, string Language, string Theme, string TimeZone, string Currency,
-    Guid? DefaultAccountId, bool AiConsent, int Version, DateOnly Today);
+    bool AiConsent, int Version, DateOnly Today);
 public sealed record PreferencesRequest(string Language, string Theme, string TimeZone, string Currency,
-    Guid? DefaultAccountId, bool AiConsent, int Version);
+    bool AiConsent, int Version);
 
 public sealed class UserService(Database db, ILogger<UserService>? logger = null)
 {
@@ -26,10 +26,7 @@ public sealed class UserService(Database db, ILogger<UserService>? logger = null
         if (user is null)
         {
             user = new User { TelegramId = telegramId, Language = language?.StartsWith("en", StringComparison.OrdinalIgnoreCase) == true ? "en" : "uk" };
-            var account = new Account { UserId = user.Id, Name = user.Language == "en" ? "Everyday" : "Основний" };
-            user.DefaultAccountId = account.Id;
             db.Add(user);
-            db.Add(account);
             db.AddRange(Categories.Select(x => new Category { UserId = user.Id, Code = x.Code, Name = x.Name }));
             await db.SaveChangesAsync(ct);
         }
@@ -45,7 +42,7 @@ public sealed class UserService(Database db, ILogger<UserService>? logger = null
     }
 
     public static ProfileDto View(User user) => new(user.Id, user.Language, user.Theme, user.TimeZone,
-        user.Currency, user.DefaultAccountId, user.AiConsent, user.Version, Rules.Today(user, TimeProvider.System));
+        user.Currency, user.AiConsent, user.Version, Rules.Today(user, TimeProvider.System));
 
     public async Task<ProfileDto> Update(User user, PreferencesRequest input, CancellationToken ct)
     {
@@ -53,13 +50,10 @@ public sealed class UserService(Database db, ILogger<UserService>? logger = null
         if (input.Language is not ("uk" or "en") || input.Theme is not ("auto" or "light" or "dark")
             || !Rules.Currencies.Contains(input.Currency)) throw new ApiError("invalid_preferences");
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(input.TimeZone, out _)) throw new ApiError("invalid_timezone");
-        if (input.DefaultAccountId is { } accountId && !await db.Accounts.AnyAsync(x => x.UserId == user.Id && x.Id == accountId && !x.Archived, ct))
-            throw new ApiError("invalid_account");
         user.Language = input.Language;
         user.Theme = input.Theme;
         user.TimeZone = input.TimeZone;
         user.Currency = input.Currency;
-        user.DefaultAccountId = input.DefaultAccountId;
         user.AiConsent = input.AiConsent;
         user.Version++;
         await db.SaveChangesAsync(ct);

@@ -10,7 +10,6 @@ export const profileSchema: z.ZodType<components["schemas"]["ProfileDto"]> =
     theme: z.string(),
     timeZone: z.string(),
     currency: z.string(),
-    defaultAccountId: id.nullable(),
     aiConsent: z.boolean(),
     version: z.number().int(),
     today: z.string(),
@@ -19,14 +18,12 @@ export const itemSchema: z.ZodType<components["schemas"]["CatalogItemDto"]> =
   z.object({
     id,
     name: z.string(),
-    currency: z.string().nullable(),
     code: z.string().nullable(),
     archived: z.boolean(),
     version: z.number().int(),
   });
 export const catalogSchema: z.ZodType<components["schemas"]["CatalogDto"]> =
   z.object({
-    accounts: z.array(itemSchema),
     categories: z.array(itemSchema),
   });
 export const expenseSchema: z.ZodType<components["schemas"]["ExpenseDto"]> =
@@ -36,7 +33,6 @@ export const expenseSchema: z.ZodType<components["schemas"]["ExpenseDto"]> =
     currency: z.string(),
     description: z.string(),
     date: z.string(),
-    accountId: id,
     categoryId: id,
     source: z.string(),
     version: z.number().int(),
@@ -52,11 +48,10 @@ export const draftSchema: z.ZodType<components["schemas"]["DraftDto"]> =
     id,
     status: z.string(),
     amount: z.string().nullable(),
-    currency: z.string().nullable(),
+    currency: z.string(),
     description: z.string(),
     transcript: z.string(),
     date: z.string(),
-    accountId: id.nullable(),
     categoryId: id.nullable(),
     errorCode: z.string().nullable(),
     version: z.number().int(),

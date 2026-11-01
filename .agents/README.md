@@ -5,7 +5,7 @@
 
 | Документ | Що визначає |
 | --- | --- |
-| [product.md](product.md) | Витрати, рахунки, категорії, звіти та однакові можливості каналів |
+| [product.md](product.md) | Витрати, категорії, звіти та однакові можливості каналів |
 | [design.md](design.md) | Стриманий UI, салатові акценти, `uk`/`en`, світла/темна теми й доступність |
 | [architecture.md](architecture.md) | Стек, структура, спільні сценарії, дані й API |
 | [security.md](security.md) | Telegram identity, Mini App sessions, CSRF і доступ до даних |

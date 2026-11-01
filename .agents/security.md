@@ -87,7 +87,7 @@ Antiforgery. Одного власного `user_id` недостатньо дл
 - `from.id` потрапляє до цих endpoints лише після перевірки Telegram update
   aiogram-сервісом. Service key доводить походження від бота, а не право на
   довільну фінансову дію: backend встановлює User за actor context і перевіряє
-  ownership записів, категорій, рахунків, діалогів і callbacks.
+  ownership записів, категорій, діалогів і callbacks.
 - Browser endpoints не приймають service headers або довільний Telegram ID
   як спосіб входу. Bot endpoints не створюють browser sessions і не видають
   боту права адміністратора або доступ до користувацьких даних без actor scope.

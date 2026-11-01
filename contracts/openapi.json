@@ -197,75 +197,6 @@
         }
       }
     },
-    "/api/accounts": {
-      "post": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogItemDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/accounts/{id}": {
-      "put": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogItemDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/categories": {
       "post": {
         "tags": [
@@ -359,14 +290,6 @@
           },
           {
             "name": "categoryId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "accountId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -518,14 +441,6 @@
           },
           {
             "name": "categoryId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "accountId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -895,75 +810,6 @@
         }
       }
     },
-    "/internal/bot/actor/accounts": {
-      "post": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogItemDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/internal/bot/actor/accounts/{id}": {
-      "put": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CatalogRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogItemDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/internal/bot/actor/categories": {
       "post": {
         "tags": [
@@ -1057,14 +903,6 @@
           },
           {
             "name": "categoryId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "accountId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -1216,14 +1054,6 @@
           },
           {
             "name": "categoryId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "accountId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -1511,17 +1341,10 @@
     "schemas": {
       "CatalogDto": {
         "required": [
-          "accounts",
           "categories"
         ],
         "type": "object",
         "properties": {
-          "accounts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CatalogItemDto"
-            }
-          },
           "categories": {
             "type": "array",
             "items": {
@@ -1534,7 +1357,6 @@
         "required": [
           "id",
           "name",
-          "currency",
           "code",
           "archived",
           "version"
@@ -1547,12 +1369,6 @@
           },
           "name": {
             "type": "string"
-          },
-          "currency": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "code": {
             "type": [
@@ -1572,7 +1388,6 @@
       "CatalogRequest": {
         "required": [
           "name",
-          "currency",
           "archived",
           "version"
         ],
@@ -1580,12 +1395,6 @@
         "properties": {
           "name": {
             "type": "string"
-          },
-          "currency": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "archived": {
             "type": "boolean"
@@ -1659,8 +1468,7 @@
       "CreateDraftRequest": {
         "required": [
           "requestId",
-          "text",
-          "accountId"
+          "text"
         ],
         "type": "object",
         "properties": {
@@ -1670,13 +1478,6 @@
           },
           "text": {
             "type": "string"
-          },
-          "accountId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
           }
         }
       },
@@ -1700,7 +1501,6 @@
           "description",
           "transcript",
           "date",
-          "accountId",
           "categoryId",
           "errorCode",
           "version",
@@ -1722,10 +1522,7 @@
             ]
           },
           "currency": {
-            "type": [
-              "null",
-              "string"
-            ]
+            "type": "string"
           },
           "description": {
             "type": "string"
@@ -1736,13 +1533,6 @@
           "date": {
             "type": "string",
             "format": "date"
-          },
-          "accountId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
           },
           "categoryId": {
             "type": [
@@ -1773,8 +1563,8 @@
       "DraftEditRequest": {
         "required": [
           "amount",
+          "currency",
           "description",
-          "accountId",
           "categoryId",
           "date",
           "version"
@@ -1787,15 +1577,11 @@
               "string"
             ]
           },
-          "description": {
+          "currency": {
             "type": "string"
           },
-          "accountId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
+          "description": {
+            "type": "string"
           },
           "categoryId": {
             "type": [
@@ -1821,7 +1607,6 @@
           "currency",
           "description",
           "date",
-          "accountId",
           "categoryId",
           "source",
           "version"
@@ -1845,10 +1630,6 @@
             "type": "string",
             "format": "date"
           },
-          "accountId": {
-            "type": "string",
-            "format": "uuid"
-          },
           "categoryId": {
             "type": "string",
             "format": "uuid"
@@ -1865,7 +1646,7 @@
       "ExpenseInput": {
         "required": [
           "amount",
-          "accountId",
+          "currency",
           "categoryId",
           "description",
           "date",
@@ -1876,9 +1657,8 @@
           "amount": {
             "type": "string"
           },
-          "accountId": {
-            "type": "string",
-            "format": "uuid"
+          "currency": {
+            "type": "string"
           },
           "categoryId": {
             "type": "string",
@@ -1996,7 +1776,6 @@
           "theme",
           "timeZone",
           "currency",
-          "defaultAccountId",
           "aiConsent",
           "version"
         ],
@@ -2014,13 +1793,6 @@
           "currency": {
             "type": "string"
           },
-          "defaultAccountId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "aiConsent": {
             "type": "boolean"
           },
@@ -2037,7 +1809,6 @@
           "theme",
           "timeZone",
           "currency",
-          "defaultAccountId",
           "aiConsent",
           "version",
           "today"
@@ -2059,13 +1830,6 @@
           },
           "currency": {
             "type": "string"
-          },
-          "defaultAccountId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
           },
           "aiConsent": {
             "type": "boolean"

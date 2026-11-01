@@ -11,7 +11,7 @@ Frontend тут означає Next.js server; browser console та локаль
 - API: початок/кінець кожного HTTP-запиту, route template, метод, status,
   тривалість, `requestId`, `traceId`, внутрішній user ID та GUID ресурсу.
   Відмови auth, CSRF, rate limiting і validation також мають status.
-- Підтверджені зміни: витрати, чернетки, рахунки, категорії, налаштування,
+- Підтверджені зміни: витрати, чернетки, категорії, налаштування,
   login/logout. Мутації логуються після commit; idempotent replay має
   окрему подію. Читання списків/звітів видно як HTTP-запити.
 - AI: операція, model ID, HTTP status, тривалість, невдалий розбір;

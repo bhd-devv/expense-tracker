@@ -6,7 +6,6 @@ COPY = {
         "expenses": "📋 Expenses",
         "reports": "📊 Reports",
         "categories": "🗂 Categories",
-        "accounts": "💳 Accounts",
         "settings": "⚙️ Settings",
         "app": "📱 Open app",
         "openAppPrompt": "Open the app using the button below to sign in securely.",
@@ -36,7 +35,6 @@ COPY = {
         "amount": "Amount",
         "description": "Description",
         "date": "Date (YYYY-MM-DD)",
-        "accountId": "Account",
         "categoryId": "Category",
         "name": "Name",
         "currency": "Currency",
@@ -46,7 +44,6 @@ COPY = {
         "language": "Language",
         "theme": "Appearance",
         "timeZone": "Time zone",
-        "defaultAccountId": "Default account",
         "aiConsent": "AI processing",
         "consent": (
             "Your text or audio and category list will be sent to OpenRouter. Temporary "
@@ -54,7 +51,6 @@ COPY = {
         ),
         "enable": "Enable",
         "disable": "Disable",
-        "none": "Ask each time",
         "auto": "Match device",
         "light": "Light",
         "dark": "Dark",
@@ -81,17 +77,13 @@ COPY = {
         "overview": "Overview",
         "refresh": "Refresh",
         "seed": "Add demo data · October 2026",
-        "seedAdded": (
-            "Added {count} demo expenses for October 2026: "
-            "4 demo accounts, 7 categories, UAH/USD/EUR."
-        ),
+        "seedAdded": ("Added {count} demo expenses for October 2026: 7 categories, UAH/USD/EUR."),
         "seedExists": (
             "Demo data for October 2026 has already been added. No new records were created."
         ),
         "seedPeriod": "To view them, select 2026-10-01 — 2026-10-31 in Expenses or Reports.",
         "seedLimit": (
-            "Demo data needs 4 free account slots and up to 7 category slots "
-            "(50 total each). Nothing was added."
+            "Demo data needs up to 7 free category slots (50 categories total). Nothing was added."
         ),
         "seedUnknown": (
             "Could not confirm the result. Send /seed again: it will not add duplicate demo data."
@@ -102,7 +94,6 @@ COPY = {
         "expenses": "📋 Витрати",
         "reports": "📊 Звіти",
         "categories": "🗂 Категорії",
-        "accounts": "💳 Рахунки",
         "settings": "⚙️ Налаштування",
         "app": "📱 Відкрити застосунок",
         "openAppPrompt": "Відкрийте застосунок кнопкою нижче для безпечного входу.",
@@ -130,7 +121,6 @@ COPY = {
         "amount": "Сума",
         "description": "Опис",
         "date": "Дата (РРРР-ММ-ДД)",
-        "accountId": "Рахунок",
         "categoryId": "Категорія",
         "name": "Назва",
         "currency": "Валюта",
@@ -140,7 +130,6 @@ COPY = {
         "language": "Мова",
         "theme": "Оформлення",
         "timeZone": "Часовий пояс",
-        "defaultAccountId": "Типовий рахунок",
         "aiConsent": "AI-обробка",
         "consent": (
             "Текст або аудіо та категорії буде надіслано в OpenRouter. Тимчасове аудіо "
@@ -148,7 +137,6 @@ COPY = {
         ),
         "enable": "Увімкнути",
         "disable": "Вимкнути",
-        "none": "Запитувати щоразу",
         "auto": "Як на пристрої",
         "light": "Світле",
         "dark": "Темне",
@@ -175,15 +163,11 @@ COPY = {
         "overview": "Огляд",
         "refresh": "Оновити",
         "seed": "Додати демодані · жовтень 2026",
-        "seedAdded": (
-            "Додано {count} демовитрат за жовтень 2026: "
-            "4 деморахунки, 7 категорій, UAH/USD/EUR."
-        ),
+        "seedAdded": ("Додано {count} демовитрат за жовтень 2026: 7 категорій, UAH/USD/EUR."),
         "seedExists": "Демодані за жовтень 2026 уже додано. Нові записи не створено.",
         "seedPeriod": "Для перегляду виберіть 2026-10-01 — 2026-10-31 у витратах або звітах.",
         "seedLimit": (
-            "Потрібні 4 вільні місця для рахунків і до 7 для категорій "
-            "(ліміт — по 50). Нічого не додано."
+            "Потрібні місця для відсутніх категорій (до 7) (ліміт — 50). Нічого не додано."
         ),
         "seedUnknown": (
             "Не вдалося підтвердити результат. Повторіть /seed: дублікати демоданих не з'являться."

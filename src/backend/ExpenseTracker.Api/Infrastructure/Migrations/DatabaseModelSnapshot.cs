@@ -22,35 +22,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Account", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("Archived")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Accounts");
-                });
-
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.AuthProof", b =>
                 {
                     b.Property<string>("Id")
@@ -187,15 +158,16 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("AccountId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal?>("Amount")
                         .HasPrecision(20, 4)
                         .HasColumnType("numeric(20,4)");
 
                     b.Property<Guid?>("CategoryId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
@@ -257,9 +229,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal>("Amount")
                         .HasPrecision(20, 4)
                         .HasColumnType("numeric(20,4)");
@@ -293,8 +262,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("UserId", "AccountId");
 
                     b.HasIndex("UserId", "CategoryId");
 
@@ -336,9 +303,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("DefaultAccountId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasColumnType("text");
@@ -364,15 +328,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Account", b =>
-                {
-                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Category", b =>
@@ -413,13 +368,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Expense", b =>
                 {
-                    b.HasOne("ExpenseTracker.Api.Infrastructure.Account", null)
-                        .WithMany()
-                        .HasForeignKey("UserId", "AccountId")
-                        .HasPrincipalKey("UserId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("ExpenseTracker.Api.Infrastructure.Category", null)
                         .WithMany()
                         .HasForeignKey("UserId", "CategoryId")

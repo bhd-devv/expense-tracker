@@ -70,8 +70,7 @@ def menu(t: dict[str, str]) -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text=t["add"]), KeyboardButton(text=t["expenses"])],
             [KeyboardButton(text=t["reports"]), KeyboardButton(text=t["categories"])],
-            [KeyboardButton(text=t["accounts"]), KeyboardButton(text=t["settings"])],
-            [KeyboardButton(text=t["app"])],
+            [KeyboardButton(text=t["settings"]), KeyboardButton(text=t["app"])],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -127,16 +126,12 @@ async def show_record(
         await show_record(message, api, "e", str(record.expenseId), t)
         return
     cat = next((category(c, t) for c in catalog.categories if c.id == record.categoryId), "—")
-    account = next(
-        (f"{a.name} · {a.currency}" for a in catalog.accounts if a.id == record.accountId), "—"
-    )
     lines = [
         t["draft"] if kind == "d" else t["expenses"],
         f"{record.amount or '—'} {record.currency or ''}",
         record.description or "—",
         str(record.date),
         cat,
-        account,
     ]
     if isinstance(record, DraftDto) and record.errorCode:
         lines.append(t["manual"])
@@ -144,7 +139,7 @@ async def show_record(
         lines.append(record.transcript)
     rows = [
         button(t, field, "field", entity, f"{kind}.{field}", int(record.version))
-        for field in ("amount", "description", "date", "accountId", "categoryId")
+        for field in ("amount", "currency", "description", "date", "categoryId")
     ]
     rows += [
         button(
@@ -177,17 +172,12 @@ async def browse(
             start, end = conversation.field.split(",")
             query.update({"from": start, "to": end})
         if conversation.entityId:
-            account, category_id = conversation.entityId.split("|")
-            if account:
-                query["accountId"] = account
-            if category_id:
-                query["categoryId"] = category_id
+            query["categoryId"] = conversation.entityId
     rows = [
         button(t, "month", "period", mode, "month"),
         button(t, "week", "period", mode, "week"),
         button(t, "all", "period", mode, "all"),
         button(t, "custom", "period", mode, "custom"),
-        button(t, "accountId", "filter", mode, "accountId"),
         button(t, "categoryId", "filter", mode, "categoryId"),
     ]
     if mode == "reports":
@@ -227,33 +217,29 @@ async def browse(
         )
 
 
-async def catalogs(message: Message, api: Api, t: dict[str, str], kind: str) -> None:
+async def catalogs(message: Message, api: Api, t: dict[str, str]) -> None:
     catalog = await api.get("/catalog", CatalogDto)
-    items = catalog.accounts if kind == "accounts" else catalog.categories
+    items = catalog.categories
     rows = [
         button(
             t,
             ("○ " if item.archived else "") + category(item, t)[:35],
             "catalog",
             compact(item.id),
-            kind,
+            "categories",
         )
         for item in items
     ]
-    rows.append(button(t, "create", "new", kind))
-    await message.answer(t[kind], reply_markup=keyboard(rows, 1))
+    rows.append(button(t, "create", "new", "categories"))
+    await message.answer(t["categories"], reply_markup=keyboard(rows, 1))
 
 
 async def settings(message: Message, api: Api, profile: ProfileDto, t: dict[str, str]) -> None:
-    catalog = await api.get("/catalog", CatalogDto)
     values = {
         "language": "English" if profile.language == "en" else "Українська",
         "theme": t[profile.theme],
         "timeZone": profile.timeZone,
         "currency": profile.currency,
-        "defaultAccountId": next(
-            (a.name for a in catalog.accounts if a.id == profile.defaultAccountId), t["none"]
-        ),
         "aiConsent": t["enable"] if profile.aiConsent else t["disable"],
     }
     rows = [
@@ -264,15 +250,15 @@ async def settings(message: Message, api: Api, profile: ProfileDto, t: dict[str,
             field,
             version=int(profile.version),
         )
-        for field in ("language", "theme", "timeZone", "currency", "defaultAccountId", "aiConsent")
+        for field in ("language", "theme", "timeZone", "currency", "aiConsent")
     ]
     rows.append(button(t, "seed", "seed"))
     await message.answer(t["settings"], reply_markup=keyboard(rows, 1))
 
 
-async def find_item(api: Api, kind: str, entity: str) -> CatalogItemDto:
+async def find_item(api: Api, entity: str) -> CatalogItemDto:
     catalog = await api.get("/catalog", CatalogDto)
-    items = catalog.accounts if kind == "accounts" else catalog.categories
+    items = catalog.categories
     return next((item for item in items if item.id == UUID(entity)), None) or _missing()
 
 
@@ -292,35 +278,40 @@ async def input_value(
     entity = conversation.entityId or ""
     if conversation.state == "record":
         kind, name, expected = field.split(".")
+        if name not in ("amount", "currency", "description", "date", "categoryId"):
+            raise ApiError("conflict", 409)
         path = entity_path(kind, entity)
         record = await get_record(api, kind, entity)
         if int(record.version) != int(expected):
             raise ApiError("conflict", 409)
         body = record.model_dump(
             mode="json",
-            include={"amount", "description", "date", "accountId", "categoryId", "version"},
+            include={"amount", "description", "date", "currency", "categoryId", "version"},
         )
         body[name] = text.replace(",", ".") if name == "amount" else text
         await api.mutate("PUT", path, DraftDto if kind == "d" else ExpenseDto, body)
         await state(api, "idle")
         await show_record(message, api, kind, entity, t)
     elif conversation.state == "new":
+        if entity != "categories":
+            raise ApiError("conflict", 409)
         await api.mutate(
             "POST",
             f"/{entity}",
             CatalogItemDto,
             {
                 "name": text,
-                "currency": field if entity == "accounts" else None,
                 "archived": False,
                 "version": 0,
             },
         )
         await state(api, "idle")
-        await catalogs(message, api, t, entity)
+        await catalogs(message, api, t)
     elif conversation.state == "rename":
         kind, expected = field.split(".")
-        item = await find_item(api, kind, entity)
+        if kind != "categories":
+            raise ApiError("conflict", 409)
+        item = await find_item(api, entity)
         if int(item.version) != int(expected):
             raise ApiError("conflict", 409)
         await api.mutate(
@@ -330,14 +321,16 @@ async def input_value(
             {**item.model_dump(mode="json"), "name": text},
         )
         await state(api, "idle")
-        await catalogs(message, api, t, kind)
+        await catalogs(message, api, t)
     elif conversation.state == "preference":
         profile, _ = await profile_context(api)
         name, expected = field.split(".")
+        if name not in ("language", "theme", "timeZone", "currency", "aiConsent"):
+            raise ApiError("conflict", 409)
         if int(profile.version) != int(expected):
             raise ApiError("conflict", 409)
         body = profile.model_dump(mode="json")
-        body[name] = text or None if name == "defaultAccountId" else text
+        body[name] = text
         updated = await api.mutate("PUT", "/profile", ProfileDto, body)
         await state(api, "idle")
         await message.answer(
@@ -394,6 +387,11 @@ async def handle_message(
     profile, t = await profile_context(api)
     try:
         text = message.text or ""
+        # Refresh reply keyboards left on devices by releases with the removed catalogue.
+        if text in ("💳 Рахунки", "💳 Accounts"):
+            await state(api, "idle")
+            await message.answer(t["stale"], reply_markup=menu(t))
+            return
         selected = next(
             (
                 key
@@ -402,7 +400,6 @@ async def handle_message(
                     "add",
                     "expenses",
                     "reports",
-                    "accounts",
                     "categories",
                     "settings",
                     "app",
@@ -417,8 +414,8 @@ async def handle_message(
             await state(api, selected if selected in ("expenses", "reports") else "idle")
             if selected in ("expenses", "reports"):
                 await browse(message, api, t, selected)
-            elif selected in ("accounts", "categories"):
-                await catalogs(message, api, t, selected)
+            elif selected == "categories":
+                await catalogs(message, api, t)
             elif selected == "settings":
                 await settings(message, api, profile, t)
             elif selected == "app":
@@ -458,7 +455,7 @@ async def handle_message(
                 "POST",
                 "/drafts",
                 DraftDto,
-                {"requestId": request_id, "text": text, "accountId": None},
+                {"requestId": request_id, "text": text},
             )
         else:
             await message.answer(t["prompt"], reply_markup=menu(t))
@@ -517,8 +514,6 @@ async def handle_callback(
             "catalog",
             "rename",
             "archive",
-            "ccurrency",
-            "setcurrency",
             "setting",
             "preference",
         }
@@ -528,7 +523,7 @@ async def handle_callback(
     try:
         if data.action == "seed":
             await seed_demo(message, api, t)
-        elif data.action in ("open", "save", "delete", "remove", "cancel", "field", "pick"):
+        elif data.action in ("open", "save", "delete", "remove", "cancel", "field"):
             kind = data.field.split(".")[0]
             record = await get_record(api, kind, data.entity)
             if data.action not in ("open",) and int(record.version) != data.version:
@@ -546,7 +541,7 @@ async def handle_callback(
                             "amount",
                             "description",
                             "date",
-                            "accountId",
+                            "currency",
                             "categoryId",
                             "version",
                         },
@@ -582,10 +577,12 @@ async def handle_callback(
                 await message.answer(t["deleted"])
             elif data.action == "field":
                 name = data.field.split(".")[1]
+                if name not in ("amount", "currency", "description", "date", "categoryId"):
+                    raise ApiError("conflict", 409)
                 current = await state(api, "record", data.entity, f"{kind}.{name}.{data.version}")
-                if name in ("accountId", "categoryId"):
+                if name == "categoryId":
                     catalog = await api.get("/catalog", CatalogDto)
-                    items = catalog.accounts if name == "accountId" else catalog.categories
+                    items = catalog.categories
                     # Selection ID is in callback; version stays in the durable conversation.
                     await message.answer(
                         t["choose"],
@@ -603,6 +600,18 @@ async def handle_callback(
                                 if not item.archived
                             ],
                             1,
+                        ),
+                    )
+                elif name == "currency":
+                    await message.answer(
+                        t["currency"],
+                        reply_markup=keyboard(
+                            [
+                                button(
+                                    t, currency, "select", currency, "record", int(current.version)
+                                )
+                                for currency in CURRENCIES
+                            ]
                         ),
                     )
                 else:
@@ -643,14 +652,14 @@ async def handle_callback(
                 )
                 await browse(message, api, t, data.entity)
         elif data.action == "filter":
+            if data.field != "categoryId":
+                raise ApiError("conflict", 409)
             catalog = await api.get("/catalog", CatalogDto)
-            items = catalog.accounts if data.field == "accountId" else catalog.categories
+            items = catalog.categories
             previous = await api.get("/conversation", ConversationDto)
             filters = previous.entityId if previous.state == data.entity else None
             period = previous.field if previous.state == data.entity else None
-            code = ("r" if data.entity == "reports" else "e") + (
-                "a" if data.field == "accountId" else "c"
-            )
+            code = "r" if data.entity == "reports" else "e"
             current = await state(api, "filter", filters, f"{code}.{period or ''}")
             await message.answer(
                 t["choose"],
@@ -675,40 +684,33 @@ async def handle_callback(
             if int(conversation.version) != data.version or conversation.state != data.field:
                 raise ApiError("conflict", 409)
             if data.field == "record":
-                await input_value(message, api, conversation, str(UUID(data.entity)), t, app_url)
-            elif data.field == "filter":
-                code, period = (conversation.field or "").split(".", 1)
-                mode = "reports" if code[0] == "r" else "expenses"
-                account, category_id = (conversation.entityId or "|").split("|")
-                if code[1] == "a":
-                    account = str(UUID(data.entity))
-                else:
-                    category_id = str(UUID(data.entity))
-                await state(api, mode, f"{account}|{category_id}", period or None)
-                await browse(message, api, t, mode)
-            elif data.field == "preference":
                 await input_value(
                     message,
                     api,
                     conversation,
-                    str(UUID(data.entity)) if data.entity != "_" else "",
+                    data.entity
+                    if (conversation.field or "").split(".")[1] == "currency"
+                    else str(UUID(data.entity)),
                     t,
                     app_url,
                 )
+            elif data.field == "filter":
+                code, period = (conversation.field or "").split(".", 1)
+                mode = "reports" if code[0] == "r" else "expenses"
+                await state(api, mode, str(UUID(data.entity)), period or None)
+                await browse(message, api, t, mode)
         elif data.action == "new":
-            if data.entity == "accounts" and data.field == "_":
-                await message.answer(
-                    t["currency"],
-                    reply_markup=keyboard([button(t, c, "new", "accounts", c) for c in CURRENCIES]),
-                )
-            else:
-                await state(api, "new", data.entity, data.field)
-                await message.answer(
-                    t["name"] + ": " + t["input"],
-                    reply_markup=keyboard([button(t, "cancel", "reset")]),
-                )
-        elif data.action in ("catalog", "rename", "archive", "ccurrency"):
-            item = await find_item(api, data.field, data.entity)
+            if data.entity != "categories":
+                raise ApiError("conflict", 409)
+            await state(api, "new", "categories")
+            await message.answer(
+                t["name"] + ": " + t["input"],
+                reply_markup=keyboard([button(t, "cancel", "reset")]),
+            )
+        elif data.action in ("catalog", "rename", "archive"):
+            if data.field != "categories":
+                raise ApiError("conflict", 409)
+            item = await find_item(api, data.entity)
             if data.action != "catalog" and int(item.version) != data.version:
                 raise ApiError("conflict", 409)
             if data.action == "catalog":
@@ -723,31 +725,12 @@ async def handle_callback(
                         int(item.version),
                     ),
                 ]
-                if data.field == "accounts":
-                    rows.append(
-                        button(
-                            t, "currency", "ccurrency", data.entity, data.field, int(item.version)
-                        )
-                    )
-                await message.answer(
-                    f"{category(item, t)} · {item.currency or ''}", reply_markup=keyboard(rows)
-                )
+                await message.answer(category(item, t), reply_markup=keyboard(rows))
             elif data.action == "rename":
                 await state(api, "rename", data.entity, f"{data.field}.{data.version}")
                 await message.answer(
                     t["name"] + ": " + t["input"],
                     reply_markup=keyboard([button(t, "cancel", "reset")]),
-                )
-            elif data.action == "ccurrency":
-                current = await state(api, "catalogcurrency", data.entity, str(data.version))
-                await message.answer(
-                    t["currency"],
-                    reply_markup=keyboard(
-                        [
-                            button(t, c, "setcurrency", c, version=int(current.version))
-                            for c in CURRENCIES
-                        ]
-                    ),
                 )
             else:
                 await api.mutate(
@@ -756,51 +739,29 @@ async def handle_callback(
                     CatalogItemDto,
                     {**item.model_dump(mode="json"), "archived": not item.archived},
                 )
-                await catalogs(message, api, t, data.field)
-        elif data.action == "setcurrency":
-            conversation = await api.get("/conversation", ConversationDto)
-            if conversation.state != "catalogcurrency" or int(conversation.version) != data.version:
-                raise ApiError("conflict", 409)
-            item = await find_item(api, "accounts", conversation.entityId or "")
-            if int(item.version) != int(conversation.field or "0"):
-                raise ApiError("conflict", 409)
-            await api.mutate(
-                "PUT",
-                f"/accounts/{item.id}",
-                CatalogItemDto,
-                {**item.model_dump(mode="json"), "currency": data.entity},
-            )
-            await state(api, "idle")
-            await catalogs(message, api, t, "accounts")
+                await catalogs(message, api, t)
         elif data.action == "setting":
             if int(profile.version) != data.version:
                 raise ApiError("conflict", 409)
             field = data.entity
+            if field not in ("language", "theme", "timeZone", "currency", "aiConsent"):
+                raise ApiError("conflict", 409)
             current = await state(api, "preference", field=f"{field}.{data.version}")
-            if field == "defaultAccountId":
-                catalog = await api.get("/catalog", CatalogDto)
-                rows = [
-                    button(t, a.name, "select", compact(a.id), "preference", int(current.version))
-                    for a in catalog.accounts
-                    if not a.archived
-                ]
-                rows.append(button(t, "none", "preference", "none", field, int(current.version)))
-            else:
-                options = (
-                    ("uk", "en")
-                    if field == "language"
-                    else ("auto", "light", "dark")
-                    if field == "theme"
-                    else CURRENCIES
-                    if field == "currency"
-                    else ("enable", "disable")
-                    if field == "aiConsent"
-                    else ()
-                )
-                rows = [
-                    button(t, option, "preference", option, field, int(current.version))
-                    for option in options
-                ]
+            options = (
+                ("uk", "en")
+                if field == "language"
+                else ("auto", "light", "dark")
+                if field == "theme"
+                else CURRENCIES
+                if field == "currency"
+                else ("enable", "disable")
+                if field == "aiConsent"
+                else ()
+            )
+            rows = [
+                button(t, option, "preference", option, field, int(current.version))
+                for option in options
+            ]
             rows.append(button(t, "cancel", "reset"))
             await message.answer(
                 t["consent"] if field == "aiConsent" else t.get(field, t["input"]),
@@ -813,19 +774,17 @@ async def handle_callback(
             name, expected = (conversation.field or "").split(".")
             if int(profile.version) != int(expected) or name != data.field:
                 raise ApiError("conflict", 409)
+            if name not in ("language", "theme", "timeZone", "currency", "aiConsent"):
+                raise ApiError("conflict", 409)
             body = profile.model_dump(mode="json")
-            body[name] = (
-                data.entity == "enable"
-                if name == "aiConsent"
-                else None
-                if data.entity == "none"
-                else data.entity
-            )
+            body[name] = data.entity == "enable" if name == "aiConsent" else data.entity
             profile = await api.mutate("PUT", "/profile", ProfileDto, body)
             await state(api, "idle")
             t = COPY[profile.language]
             await message.answer(t["welcome"], reply_markup=menu(t))
             await settings(message, api, profile, t)
+        else:
+            raise ApiError("conflict", 409)
     except ApiError as error:
         log_failure(logger, "Callback action rejected", error, status=error.status)
         await message.answer(

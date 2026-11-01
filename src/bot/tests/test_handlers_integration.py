@@ -130,7 +130,6 @@ async def test_app_launch_uses_inline_web_app_and_preserves_reply_menu(
                     "theme": "auto",
                     "timeZone": "Europe/Kyiv",
                     "currency": "UAH",
-                    "defaultAccountId": None,
                     "aiConsent": False,
                     "version": 1,
                     "today": "2026-11-01",
@@ -203,7 +202,6 @@ async def test_seed_routes_through_ingress_without_ai_or_implicit_retry(
                     "theme": "auto",
                     "timeZone": "Europe/Kyiv",
                     "currency": "UAH",
-                    "defaultAccountId": None,
                     "aiConsent": False,
                     "version": 1,
                     "today": "2026-11-01",
@@ -262,4 +260,172 @@ async def test_seed_routes_through_ingress_without_ai_or_implicit_retry(
         "timeout": "seedUnknown",
     }[outcome]
     assert COPY[language][key].format(count=70) in response.text
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+@pytest.mark.parametrize("entry", ["legacy_menu", "removed_callback"])
+async def test_removed_catalogue_actions_refresh_menu_without_creating_expenses(
+    language: str, entry: str
+) -> None:
+    calls: list[str] = []
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/profile"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "aiConsent": False,
+                    "version": 1,
+                    "today": "2026-11-02",
+                },
+            )
+        assert request.url.path.endswith("/conversation")
+        return httpx.Response(
+            200, json={"state": "idle", "entityId": None, "field": None, "version": 1}
+        )
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    user = User(id=42, is_bot=False, first_name="Synthetic", language_code=language)
+    message = Message(
+        message_id=1,
+        date=datetime.now(UTC),
+        chat=Chat(id=42, type="private"),
+        from_user=user,
+        text="💳 Accounts" if language == "en" else "💳 Рахунки",
+    ).as_(bot)
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        if entry == "legacy_menu":
+            await handle_message(
+                message, client, "https://example.com", Update(update_id=1, message=message), bot
+            )
+            assert len(calls) == 3
+            assert isinstance(session.sent[-1].reply_markup, ReplyKeyboardMarkup)
+        else:
+            action = Action(action="new", entity="accounts")
+            callback = CallbackQuery(
+                id="synthetic",
+                from_user=user,
+                chat_instance="test",
+                message=message,
+                data=action.pack(),
+            ).as_(bot)
+            await handle_callback(callback, action, client, "https://example.com")
+            assert len(calls) == 1
+    response = session.sent[-1]
+    assert isinstance(response, SendMessage)
+    assert response.text == COPY[language]["stale"]
+    assert all("/drafts" not in path for path in calls)
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+@pytest.mark.parametrize("kind", ["d", "e"])
+async def test_currency_button_updates_record_without_a_financial_account(
+    language: str, kind: str
+) -> None:
+    record_id = "00000000-0000-0000-0000-000000000043"
+    category_id = "00000000-0000-0000-0000-000000000044"
+    record = {
+        "id": record_id,
+        "amount": "12.5",
+        "currency": "UAH",
+        "description": "Synthetic lunch",
+        "date": "2026-10-12",
+        "categoryId": category_id,
+        "version": 3,
+        **(
+            {"status": "ready", "transcript": "", "errorCode": None, "expenseId": None}
+            if kind == "d"
+            else {"source": "bot"}
+        ),
+    }
+    changes: list[dict[str, object]] = []
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        import json
+
+        path = request.url.path
+        if path.endswith("/profile"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "aiConsent": True,
+                    "version": 1,
+                    "today": "2026-11-02",
+                },
+            )
+        if path.endswith("/conversation"):
+            return httpx.Response(
+                200,
+                json={
+                    "state": "record",
+                    "entityId": record_id,
+                    "field": f"{kind}.currency.3",
+                    "version": 5,
+                },
+            )
+        if path.endswith("/catalog"):
+            return httpx.Response(
+                200,
+                json={
+                    "categories": [
+                        {
+                            "id": category_id,
+                            "name": "Food",
+                            "code": "food",
+                            "archived": False,
+                            "version": 1,
+                        }
+                    ]
+                },
+            )
+        assert path.endswith(f"/{'drafts' if kind == 'd' else 'expenses'}/{record_id}")
+        if request.method == "PUT":
+            body = json.loads(request.content)
+            changes.append(body)
+            record.update({"currency": body["currency"], "version": 4})
+        return httpx.Response(200, json=record)
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    user = User(id=42, is_bot=False, first_name="Synthetic", language_code=language)
+    message = Message(
+        message_id=1, date=datetime.now(UTC), chat=Chat(id=42, type="private"), from_user=user
+    ).as_(bot)
+    action = Action(action="select", entity="USD", field="record", version=5)
+    callback = CallbackQuery(
+        id="synthetic", from_user=user, chat_instance="test", message=message, data=action.pack()
+    ).as_(bot)
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        await handle_callback(callback, action, client, "https://example.com")
+    assert changes == [
+        {
+            "amount": "12.5",
+            "currency": "USD",
+            "description": "Synthetic lunch",
+            "date": "2026-10-12",
+            "categoryId": category_id,
+            "version": 3,
+        }
+    ]
+    response = session.sent[-1]
+    assert isinstance(response, SendMessage)
+    assert "12.5 USD" in response.text
     await bot.session.close()

@@ -6,13 +6,20 @@
 
 ## Активна робота
 
-Немає. [MVP завершено локально](tasks/implement-mvp-2026-11-01/README.md).
+Локальні зміни [витрат без фінансових рахунків](tasks/expenses-without-accounts-2026-11-02/README.md)
+завершені. Runtime перевірки очікують окремого запиту користувача;
+перед release потрібні PostgreSQL migration test і узгоджене оновлення сервісів.
 
 ## Блокери
 
 Немає для завершеної локальної задачі.
 
 ## Межі впевненості
+
+Міграція `RemoveFinancialAccounts` підготовлена, але не застосовувалася до
+реальної БД у цій задачі. Backend build, tests, lint/typecheck, browser і
+Coolify для спрощеної моделі не запускалися. Зворотна міграція відхиляється;
+перед production release потрібен backup. Докладно — [deployment](../docs/deployment.md).
 
 Наданий Docker inspect підтвердив дві спільні мережі gateway/backend;
 production logs показали HTTP у `Antiforgery.CheckSSLConfig`.

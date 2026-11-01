@@ -54,7 +54,6 @@ src/
         Auth/
         Users/
         Expenses/
-        Accounts/
         Categories/
         Reports/
         BotIntegration/

@@ -66,11 +66,11 @@ def test_callback_identity_is_sender_and_all_callbacks_fit() -> None:
         t = COPY[lang]
         reply = menu(t)
         assert reply.is_persistent and reply.resize_keyboard
-        assert reply.keyboard[-1][0].text == t["app"]
+        assert reply.keyboard[-1][-1].text == t["app"]
         assert all(button.web_app is None for row in reply.keyboard for button in row)
         launch = app_keyboard(t, "https://example.com").inline_keyboard[0][0]
         assert launch.web_app is not None and launch.web_app.url == "https://example.com"
-        for field in ("amount", "description", "accountId", "categoryId", "date"):
+        for field in ("amount", "description", "currency", "categoryId", "date"):
             packed = Action(
                 action="field", entity="a" * 32, field="d." + field, version=100000
             ).pack()
@@ -91,7 +91,6 @@ async def test_api_attaches_actor_and_validates_generated_contract() -> None:
                 "theme": "auto",
                 "timeZone": "Europe/Kyiv",
                 "currency": "UAH",
-                "defaultAccountId": None,
                 "aiConsent": False,
                 "version": 1,
                 "today": "2026-11-01",

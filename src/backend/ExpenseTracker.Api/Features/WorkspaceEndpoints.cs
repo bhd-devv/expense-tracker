@@ -15,17 +15,13 @@ public static class WorkspaceEndpoints
             await users.Update(await users.Current(context, ct), input, ct));
         group.MapGet("/catalog", async (HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
             await catalogs.List(await users.Current(context, ct), ct));
-        group.MapPost("/accounts", async (CatalogRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
-            await catalogs.Account(await users.Current(context, ct), null, input, ct));
-        group.MapPut("/accounts/{id:guid}", async (Guid id, CatalogRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
-            await catalogs.Account(await users.Current(context, ct), id, input, ct));
         group.MapPost("/categories", async (CatalogRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
             await catalogs.Category(await users.Current(context, ct), null, input, ct));
         group.MapPut("/categories/{id:guid}", async (Guid id, CatalogRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
             await catalogs.Category(await users.Current(context, ct), id, input, ct));
-        group.MapGet("/expenses", async (DateOnly? from, DateOnly? to, Guid? categoryId, Guid? accountId, int? page,
+        group.MapGet("/expenses", async (DateOnly? from, DateOnly? to, Guid? categoryId, int? page,
             HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            await expenses.List(await users.Current(context, ct), from, to, categoryId, accountId, page ?? 0, ct));
+            await expenses.List(await users.Current(context, ct), from, to, categoryId, page ?? 0, ct));
         group.MapGet("/expenses/{id:guid}", async (Guid id, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             ExpenseService.View(await expenses.Find(await users.Current(context, ct), id, ct)));
         group.MapPut("/expenses/{id:guid}", async (Guid id, ExpenseInput input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
@@ -35,11 +31,11 @@ public static class WorkspaceEndpoints
             await expenses.Delete(await users.Current(context, ct), id, version, ct);
             return Results.NoContent();
         });
-        group.MapGet("/reports", async (DateOnly? from, DateOnly? to, Guid? categoryId, Guid? accountId,
+        group.MapGet("/reports", async (DateOnly? from, DateOnly? to, Guid? categoryId,
             HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            await expenses.Report(await users.Current(context, ct), from, to, categoryId, accountId, ct));
+            await expenses.Report(await users.Current(context, ct), from, to, categoryId, ct));
         group.MapPost("/drafts", async (CreateDraftRequest input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, input.AccountId, source, null, ct)).RequireRateLimiting("ai");
+            await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, source, null, ct)).RequireRateLimiting("ai");
         group.MapPost("/drafts/audio", async (HttpRequest request, HttpContext context, UserService users, ExpenseService expenses, ILogger<OpenRouter> logger, CancellationToken ct) =>
         {
             var user = await users.Current(context, ct);
@@ -49,13 +45,12 @@ public static class WorkspaceEndpoints
             var file = form.Files.GetFile("audio") ?? throw new ApiError("invalid_audio");
             if (file.Length is <= 0 or > 10 * 1024 * 1024) throw new ApiError("audio_too_large", 413);
             if (!Guid.TryParse(form["requestId"], out var requestId)) throw new ApiError("invalid_request_id");
-            Guid? accountId = Guid.TryParse(form["accountId"], out var account) ? account : null;
             await using var stream = file.OpenReadStream();
             var audio = await OpenRouter.NormalizeAudio(stream, ct, logger);
-            return await expenses.Create(user, requestId, "", accountId, source, audio, ct);
+            return await expenses.Create(user, requestId, "", source, audio, ct);
         }).DisableAntiforgery().RequireRateLimiting("ai");
         group.MapGet("/drafts/{id:guid}", async (Guid id, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            await expenses.ViewDraft(await expenses.FindDraft(await users.Current(context, ct), id, ct), ct));
+            ExpenseService.ViewDraft(await expenses.FindDraft(await users.Current(context, ct), id, ct)));
         group.MapPut("/drafts/{id:guid}", async (Guid id, DraftEditRequest input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.EditDraft(await users.Current(context, ct), id, input, ct));
         group.MapPost("/drafts/{id:guid}/confirm", async (Guid id, ExpenseInput input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>

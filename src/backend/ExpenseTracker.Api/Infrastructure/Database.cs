@@ -10,18 +10,7 @@ public sealed class User
     public string Theme { get; set; } = "auto";
     public string TimeZone { get; set; } = "Europe/Kyiv";
     public string Currency { get; set; } = "UAH";
-    public Guid? DefaultAccountId { get; set; }
     public bool AiConsent { get; set; }
-    public int Version { get; set; } = 1;
-}
-
-public sealed class Account
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid UserId { get; set; }
-    public string Name { get; set; } = "";
-    public string Currency { get; set; } = "UAH";
-    public bool Archived { get; set; }
     public int Version { get; set; } = 1;
 }
 
@@ -39,7 +28,6 @@ public sealed class Expense
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
-    public Guid AccountId { get; set; }
     public Guid CategoryId { get; set; }
     public decimal Amount { get; set; }
     public string Currency { get; set; } = "UAH";
@@ -61,7 +49,7 @@ public sealed class Draft
     public string Transcript { get; set; } = "";
     public decimal? Amount { get; set; }
     public string Description { get; set; } = "";
-    public Guid? AccountId { get; set; }
+    public string Currency { get; set; } = "UAH";
     public Guid? CategoryId { get; set; }
     public DateOnly Date { get; set; }
     public string Status { get; set; } = "processing";
@@ -118,7 +106,6 @@ public sealed class DemoSeed
 public sealed class Database(DbContextOptions<Database> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
-    public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<Draft> Drafts => Set<Draft>();
@@ -144,19 +131,14 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
     {
         model.Entity<User>().HasIndex(x => x.TelegramId).IsUnique();
         model.Entity<User>().Property(x => x.Version).IsConcurrencyToken();
-        model.Entity<Account>().HasAlternateKey(x => new { x.UserId, x.Id });
         model.Entity<Category>().HasAlternateKey(x => new { x.UserId, x.Id });
-        model.Entity<Account>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
         model.Entity<Category>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
-        model.Entity<Account>().Property(x => x.Version).IsConcurrencyToken();
         model.Entity<Category>().Property(x => x.Version).IsConcurrencyToken();
         model.Entity<Expense>(entity =>
         {
             entity.Property(x => x.Amount).HasPrecision(20, 4);
             entity.Property(x => x.Version).IsConcurrencyToken();
             entity.HasIndex(x => new { x.UserId, x.Date, x.Id });
-            entity.HasOne<Account>().WithMany().HasForeignKey(x => new { x.UserId, x.AccountId })
-                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Category>().WithMany().HasForeignKey(x => new { x.UserId, x.CategoryId })
                 .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(t => t.HasCheckConstraint("positive_amount", "\"Amount\" > 0"));

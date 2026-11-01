@@ -64,9 +64,9 @@ public sealed class PostgresTests
         using var browser = await Browser(factory, userId);
         using var stranger = await Browser(factory, userId + 1);
         var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        var draft = await (await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "Кава 85", null)))
+        var draft = await (await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "Кава 85")))
             .Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
-        var input = new ExpenseInput("85.00", catalog.Accounts[0].Id, catalog.Categories[0].Id, "Кава", draft.Date, draft.Version);
+        var input = new ExpenseInput("85.00", "UAH", catalog.Categories[0].Id, "Кава", draft.Date, draft.Version);
         var first = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", input);
         first.EnsureSuccessStatusCode();
         var expense = await first.Content.ReadFromJsonAsync<ExpenseDto>() ?? throw new InvalidOperationException();
@@ -83,6 +83,46 @@ public sealed class PostgresTests
         var shared = await bot.GetFromJsonAsync<ExpensePage>("/internal/bot/actor/expenses");
         Assert.Equal("90", Assert.Single(shared!.Items).Amount);
         Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync("/internal/bot/actor/profile")).StatusCode);
+    }
+
+    [PostgresFact]
+    public async Task ExpenseAndDraftCurrenciesSurvivePreferenceChanges()
+    {
+        await using var factory = await Factory();
+        using var browser = await Browser(factory, Random.Shared.NextInt64(100_000_000, 900_000_000));
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        var updated = await browser.PutAsJsonAsync("/api/profile",
+            new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "EUR", false, profile.Version));
+        updated.EnsureSuccessStatusCode();
+        profile = await updated.Content.ReadFromJsonAsync<ProfileDto>() ?? throw new InvalidOperationException();
+        var input = new CreateDraftRequest(Guid.NewGuid(), "Lunch 12.50");
+        var draftResponse = await browser.PostAsJsonAsync("/api/drafts", input);
+        draftResponse.EnsureSuccessStatusCode();
+        var draft = await draftResponse.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("EUR", draft.Currency);
+        (await browser.PutAsJsonAsync("/api/profile",
+            new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "USD", false, profile.Version))).EnsureSuccessStatusCode();
+        var replay = await (await browser.PostAsJsonAsync("/api/drafts", input)).Content.ReadFromJsonAsync<DraftDto>();
+        Assert.Equal("EUR", replay!.Currency);
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var confirmation = new ExpenseInput("12.50", draft.Currency, catalog.Categories[0].Id, "Lunch", draft.Date, draft.Version);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,
+            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "invalid" })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity,
+            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "JPY" })).StatusCode);
+        var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation);
+        saved.EnsureSuccessStatusCode();
+        var expense = await saved.Content.ReadFromJsonAsync<ExpenseDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("EUR", expense.Currency);
+        Assert.Equal("12.5", expense.Amount);
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "USD" })).StatusCode);
+        var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}",
+            confirmation with { Currency = "JPY", Amount = "1250", Version = expense.Version });
+        edited.EnsureSuccessStatusCode();
+        var report = await browser.GetFromJsonAsync<ReportDto>("/api/reports") ?? throw new InvalidOperationException();
+        Assert.Equal("JPY", Assert.Single(report.Totals).Currency);
+        Assert.Equal("1250", Assert.Single(report.Totals).Amount);
     }
 
     [PostgresFact]
@@ -110,14 +150,13 @@ public sealed class PostgresTests
         using var stranger = await Browser(factory, userId + 1);
         var own = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         var foreign = await stranger.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        var draft = await (await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "Taxi 100", null))).Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
-        var input = new ExpenseInput("100", own.Accounts[0].Id, own.Categories[0].Id, "Taxi", draft.Date, draft.Version);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", input with { AccountId = foreign.Accounts[0].Id })).StatusCode);
+        var draft = await (await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "Taxi 100"))).Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        var input = new ExpenseInput("100", "UAH", own.Categories[0].Id, "Taxi", draft.Date, draft.Version);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", input with { CategoryId = foreign.Categories[0].Id })).StatusCode);
         var results = await Task.WhenAll(browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", input), browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", input));
         Assert.All(results, result => Assert.Equal(HttpStatusCode.OK, result.StatusCode));
         Assert.Single((await browser.GetFromJsonAsync<ExpensePage>("/api/expenses"))!.Items);
         var expense = await results[0].Content.ReadFromJsonAsync<ExpenseDto>() ?? throw new InvalidOperationException();
-        Assert.Equal(HttpStatusCode.Conflict, (await browser.PutAsJsonAsync($"/api/accounts/{own.Accounts[0].Id}", new CatalogRequest("Taxi account", "USD", false, own.Accounts[0].Version))).StatusCode);
         (await browser.DeleteAsync($"/api/expenses/{expense.Id}?version={expense.Version}")).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.NotFound, (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", input)).StatusCode);
     }
@@ -171,7 +210,6 @@ public sealed class PostgresTests
         Assert.Equal(profile, await browser.GetFromJsonAsync<ProfileDto>("/api/profile"));
         var after = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         Assert.Equal(catalog.Categories, after.Categories);
-        Assert.Equal(catalog.Accounts.Count + 4, after.Accounts.Count);
         var seeded = new List<ExpenseDto>();
         for (var page = 0; page < 4; page++)
         {
@@ -195,7 +233,7 @@ public sealed class PostgresTests
         var expense = seeded[0];
         Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync($"/api/expenses/{expense.Id}")).StatusCode);
         var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}",
-            new ExpenseInput("1.25", expense.AccountId, expense.CategoryId, "Edited demo", expense.Date, expense.Version));
+            new ExpenseInput("1.25", expense.Currency, expense.CategoryId, "Edited demo", expense.Date, expense.Version));
         edited.EnsureSuccessStatusCode();
         var shared = await bot.GetFromJsonAsync<ExpenseDto>($"/internal/bot/actor/expenses/{expense.Id}");
         Assert.Equal("1.25", shared!.Amount);
@@ -222,7 +260,7 @@ public sealed class PostgresTests
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<Database>();
-            db.Accounts.AddRange(Enumerable.Range(1, 46).Select(i => new Account { UserId = profile.Id, Name = $"Existing {i}" }));
+            db.Categories.AddRange(Enumerable.Range(1, 43).Select(i => new Category { UserId = profile.Id, Name = $"Existing {i}" }));
             var food = await db.Categories.SingleAsync(x => x.UserId == profile.Id && x.Code == "food");
             food.Archived = true;
             await db.SaveChangesAsync();
@@ -236,14 +274,13 @@ public sealed class PostgresTests
             var db = scope.ServiceProvider.GetRequiredService<Database>();
             Assert.False(await db.DemoSeeds.AnyAsync(x => x.UserId == profile.Id));
             Assert.False(await db.Expenses.AnyAsync(x => x.UserId == profile.Id));
-            Assert.Equal(7, await db.Categories.CountAsync(x => x.UserId == profile.Id));
-            var extra = await db.Accounts.FirstAsync(x => x.UserId == profile.Id && x.Id != profile.DefaultAccountId);
-            db.Accounts.Remove(extra);
+            Assert.Equal(50, await db.Categories.CountAsync(x => x.UserId == profile.Id));
+            var extra = await db.Categories.FirstAsync(x => x.UserId == profile.Id && x.Code == null);
+            db.Categories.Remove(extra);
             await db.SaveChangesAsync();
         }
         (await bot.PostAsync("/internal/bot/actor/seed", null)).EnsureSuccessStatusCode();
         var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        Assert.Equal(50, catalog.Accounts.Count);
         Assert.Single(catalog.Categories.Where(x => x.Code == "food" && x.Archived));
         Assert.Single(catalog.Categories.Where(x => x.Code == "food" && !x.Archived));
     }
@@ -272,7 +309,7 @@ public sealed class PostgresTests
             {
                 calls++;
                 clock.Now = clock.Now.AddSeconds(2);
-                var content = System.Text.Json.JsonSerializer.Serialize(new { amount = "85.20", currency = "UAH", categoryId = category.ToString(), description = "Кава", transcript = "Кава 85 гривень 20 копійок" });
+                var content = System.Text.Json.JsonSerializer.Serialize(new { amount = "85.20", currency = "EUR", categoryId = category.ToString(), description = "Кава", transcript = "Кава 85 євро 20 центів" });
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) });
             }));
         });
@@ -282,20 +319,21 @@ public sealed class PostgresTests
         configuration["OpenRouter:TextModel"] = "synthetic-model";
         using var browser = await Browser(factory, Random.Shared.NextInt64(100_000_000, 900_000_000), clock.Now);
         var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
-        (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, profile.Currency, profile.DefaultAccountId, true, profile.Version))).EnsureSuccessStatusCode();
+        (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, profile.Currency, true, profile.Version))).EnsureSuccessStatusCode();
         var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         category = catalog.Categories.First(x => x.Code == "food").Id;
-        var input = new CreateDraftRequest(Guid.NewGuid(), "Кава 85 гривень 20 копійок", null);
+        var input = new CreateDraftRequest(Guid.NewGuid(), "Кава 85 євро 20 центів");
         var response = await browser.PostAsJsonAsync("/api/drafts", input);
         response.EnsureSuccessStatusCode();
         var draft = await response.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
         Assert.Equal("ready", draft.Status);
         Assert.Equal("85.2", draft.Amount);
+        Assert.Equal("EUR", draft.Currency);
         Assert.Equal(category, draft.CategoryId);
         Assert.Equal(new DateOnly(2026, 11, 1), draft.Date);
         (await browser.PostAsJsonAsync("/api/drafts", input)).EnsureSuccessStatusCode();
         Assert.Equal(1, calls);
-        var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", new ExpenseInput("85.2", catalog.Accounts[0].Id, category, draft.Description, draft.Date, draft.Version));
+        var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", new ExpenseInput("85.2", "EUR", category, draft.Description, draft.Date, draft.Version));
         saved.EnsureSuccessStatusCode();
     }
 

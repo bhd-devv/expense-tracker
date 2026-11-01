@@ -340,86 +340,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/accounts": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CatalogRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["CatalogItemDto"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/accounts/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CatalogRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["CatalogItemDto"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/categories": {
     parameters: {
       query?: never;
@@ -513,7 +433,6 @@ export interface paths {
           from?: string;
           to?: string;
           categoryId?: string;
-          accountId?: string;
           page?: number;
         };
         header?: never;
@@ -637,7 +556,6 @@ export interface paths {
           from?: string;
           to?: string;
           categoryId?: string;
-          accountId?: string;
         };
         header?: never;
         path?: never;
@@ -1095,86 +1013,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/internal/bot/actor/accounts": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CatalogRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["CatalogItemDto"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/internal/bot/actor/accounts/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CatalogRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["CatalogItemDto"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/internal/bot/actor/categories": {
     parameters: {
       query?: never;
@@ -1268,7 +1106,6 @@ export interface paths {
           from?: string;
           to?: string;
           categoryId?: string;
-          accountId?: string;
           page?: number;
         };
         header?: never;
@@ -1392,7 +1229,6 @@ export interface paths {
           from?: string;
           to?: string;
           categoryId?: string;
-          accountId?: string;
         };
         header?: never;
         path?: never;
@@ -1735,14 +1571,12 @@ export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
     CatalogDto: {
-      accounts: components["schemas"]["CatalogItemDto"][];
       categories: components["schemas"]["CatalogItemDto"][];
     };
     CatalogItemDto: {
       /** Format: uuid */
       id: string;
       name: string;
-      currency: null | string;
       code: null | string;
       archived: boolean;
       /** Format: int32 */
@@ -1750,7 +1584,6 @@ export interface components {
     };
     CatalogRequest: {
       name: string;
-      currency: null | string;
       archived: boolean;
       /** Format: int32 */
       version: number;
@@ -1773,8 +1606,6 @@ export interface components {
       /** Format: uuid */
       requestId: string;
       text: string;
-      /** Format: uuid */
-      accountId: null | string;
     };
     CsrfDto: {
       token: string;
@@ -1784,13 +1615,11 @@ export interface components {
       id: string;
       status: string;
       amount: null | string;
-      currency: null | string;
+      currency: string;
       description: string;
       transcript: string;
       /** Format: date */
       date: string;
-      /** Format: uuid */
-      accountId: null | string;
       /** Format: uuid */
       categoryId: null | string;
       errorCode: null | string;
@@ -1801,9 +1630,8 @@ export interface components {
     };
     DraftEditRequest: {
       amount: null | string;
+      currency: string;
       description: string;
-      /** Format: uuid */
-      accountId: null | string;
       /** Format: uuid */
       categoryId: null | string;
       /** Format: date */
@@ -1820,8 +1648,6 @@ export interface components {
       /** Format: date */
       date: string;
       /** Format: uuid */
-      accountId: string;
-      /** Format: uuid */
       categoryId: string;
       source: string;
       /** Format: int32 */
@@ -1829,8 +1655,7 @@ export interface components {
     };
     ExpenseInput: {
       amount: string;
-      /** Format: uuid */
-      accountId: string;
+      currency: string;
       /** Format: uuid */
       categoryId: string;
       description: string;
@@ -1873,8 +1698,6 @@ export interface components {
       theme: string;
       timeZone: string;
       currency: string;
-      /** Format: uuid */
-      defaultAccountId: null | string;
       aiConsent: boolean;
       /** Format: int32 */
       version: number;
@@ -1886,8 +1709,6 @@ export interface components {
       theme: string;
       timeZone: string;
       currency: string;
-      /** Format: uuid */
-      defaultAccountId: null | string;
       aiConsent: boolean;
       /** Format: int32 */
       version: number;

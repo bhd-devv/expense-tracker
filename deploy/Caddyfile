@@ -1,0 +1,27 @@
+{
+    auto_https off
+    admin off
+}
+:8080 {
+    # Coolify terminates TLS. The gateway is the sole public service.
+    handle /internal/* {
+        respond 404
+    }
+    handle /api/* {
+        reverse_proxy backend:8080 {
+            # Secure cookies and origin validation use fixed production config.
+            header_up X-Forwarded-Proto https
+        }
+    }
+    handle /telegram/webhook {
+        reverse_proxy bot:8081
+    }
+    handle {
+        reverse_proxy frontend:3000
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}

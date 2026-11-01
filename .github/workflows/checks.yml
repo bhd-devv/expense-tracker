@@ -1,0 +1,74 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_DB: expense_tracker_test
+          POSTGRES_USER: expense_test
+          POSTGRES_PASSWORD: local-ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U expense_test -d expense_tracker_test'
+          --health-interval 5s --health-timeout 5s --health-retries 15
+    env:
+      EXPENSE_TEST_DATABASE: Host=127.0.0.1;Port=5432;Database=expense_tracker_test;Username=expense_test;Password=local-ci-only
+      DOTNET_NOLOGO: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.12.5
+          python-version: 3.14.7
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: dotnet restore src/backend/ExpenseTracker.slnx --locked-mode
+      - run: dotnet format src/backend/ExpenseTracker.slnx --verify-no-changes --no-restore
+      - run: dotnet test tests/ExpenseTracker.Tests -c Release --no-restore
+      - run: npm ci
+        working-directory: src/frontend
+      - run: npm run typecheck && npm run lint && npm run format:check && npm run build
+        working-directory: src/frontend
+      - run: uv sync --frozen
+        working-directory: src/bot
+      - run: uv run --frozen ruff check src tests && uv run --frozen ruff format --check src tests && uv run --frozen mypy src
+        working-directory: src/bot
+      - name: Integration and generated contract drift
+        shell: bash
+        run: |
+          dotnet src/backend/ExpenseTracker.Api/bin/Release/net10.0/ExpenseTracker.Api.dll \
+            --environment Development --urls http://127.0.0.1:5085 \
+            --ConnectionStrings:Database "$EXPENSE_TEST_DATABASE" \
+            --App:Origin http://localhost:3000 \
+            --Telegram:BotToken 123456:test-token-used-only-in-local-tests \
+            --Telegram:ServiceKey local-test-service-key-not-for-production-12345678 > /tmp/expense-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:5085/api/health/ready > /dev/null; then break; fi
+            sleep 1
+          done
+          python3 scripts/generate_contracts.py
+          git diff --exit-code -- contracts/openapi.json src/frontend/src/lib/api-schema.d.ts src/bot/src/expense_tracker_bot/models.py
+          cd src/bot
+          EXPENSE_BOT_TEST_URL=http://127.0.0.1:5085/internal/bot/ uv run --frozen pytest -q
+      - run: python3 scripts/check_docs.py --check
+      - run: git diff --check
+  containers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose --env-file .env.example -f deploy/compose.yaml config --quiet
+      - run: docker compose --env-file .env.example -f deploy/compose.yaml build

@@ -6,6 +6,7 @@
 | Документ | Що визначає |
 | --- | --- |
 | [product.md](product.md) | Витрати, рахунки, категорії, звіти та однакові можливості каналів |
+| [design.md](design.md) | Стриманий UI, салатові акценти, `uk`/`en`, світла/темна теми й доступність |
 | [architecture.md](architecture.md) | Стек, структура, спільні сценарії, дані й API |
 | [security.md](security.md) | Telegram identity, Mini App sessions, CSRF і доступ до даних |
 | [telegram.md](telegram.md) | Reply/inline keyboards, діалоги та надійна обробка updates |
@@ -25,7 +26,7 @@
 архіви потрібні для контексту й не є інструкціями до виконання.
 
 Вимоги користувача: .NET backend, TypeScript / Next.js frontend, Telegram-бот
-із функціями frontend, безшовна безпечна авторизація й деплой через Coolify.
-PostgreSQL, один backend-процес для API та бота й описаний нижче склад MVP —
+на Python / aiogram із функціями frontend, безшовна безпечна авторизація й
+деплой через Coolify. PostgreSQL і описаний у `product.md` склад MVP —
 початкові архітектурні рішення. Змінюй їх за підтвердженою потребою, пояснюючи
 наслідки. Не додавай інфраструктуру або функції лише тому, що вони можливі.

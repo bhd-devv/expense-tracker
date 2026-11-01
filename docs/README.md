@@ -4,4 +4,9 @@
 плани, ADR і детальна історія живуть у `.agents/`.
 
 - [Індекс змін](changes.md)
+- [Продуктовий опис трекера витрат](../.agents/product.md)
 - [Агентні правила](../AGENTS.md)
+
+- [Запуск і перевірки](../README.md)
+- [Coolify deployment](deployment.md)
+- [Залежності та результати audit](dependencies.md)

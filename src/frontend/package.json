@@ -1,0 +1,32 @@
+{
+  "name": "expense-tracker-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname localhost",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "generate": "openapi-typescript ../../contracts/openapi.json -o src/lib/api-schema.d.ts",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" *.ts *.mjs *.json",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" *.ts *.mjs *.json"
+  },
+  "dependencies": {
+    "lucide-react": "1.66.0",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "eslint": "10.14.0",
+    "eslint-config-next": "16.4.3",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3"
+  }
+}

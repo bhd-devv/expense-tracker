@@ -3,3 +3,15 @@ output/
 .env
 .env.*
 !.env.example
+node_modules/
+.next/
+.venv/
+__pycache__/
+*.pyc
+**/bin/
+**/obj/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.tsbuildinfo
+.playwright-cli/

@@ -4,25 +4,29 @@
 
 Проєкт має розгортатися як Docker Compose application у Coolify.
 Під час реалізації додай `deploy/compose.yaml` і окремі multi-stage Dockerfile
-для backend та frontend. У Compose вкажи build contexts і Dockerfile paths
+для backend, frontend та окремий production Dockerfile для Python/aiogram
+бота. У Compose вкажи build contexts і Dockerfile paths
 відносно розташування Compose. Перевір реальний build у Coolify.
 
 | Сервіс | Призначення | Доступ |
 | --- | --- | --- |
 | `frontend` | Next.js production server, standalone output | Публічний HTTPS через proxy |
-| `backend` | ASP.NET Core API, webhook, inbox/outbox workers | `/api/*` і webhook через proxy |
+| `backend` | ASP.NET Core API, бізнес-сценарії, persistence та приватний bot API | Лише `/api/*` через proxy; `/internal/bot/*` приватно |
+| `bot` | Python / aiogram, webhook, inbox/outbox delivery workers | Лише webhook через proxy; backend доступний у Docker network |
 | `postgres` | Дані, сесії, inbox/outbox | Лише приватна Docker network |
 | `migrate` | Одноразові EF Core migrations | Deployment job, без публічного порту |
 
 Один публічний origin, наприклад `https://expenses.example.com`:
 
 - `/api/*` → backend; цей маршрут має вищий пріоритет за frontend catch-all.
-- `/telegram/webhook` → backend із перевіркою webhook secret.
+- `/telegram/webhook` → aiogram-сервіс із перевіркою webhook secret.
 - решта маршрутів → frontend.
 
 Домен у прикладі є placeholder. Налаштуй точні domain/path rules відповідно
 до поточної версії Coolify/proxy й перевір, що API ніколи не потрапляє до
-Next.js catch-all. Зовнішній TLS завершує Coolify proxy. Не публікуй БД.
+Next.js catch-all. Зовнішній TLS завершує Coolify proxy. Не публікуй БД,
+`/internal/bot/*` або весь bot port. Webhook маршрут має вищий пріоритет
+за frontend catch-all; приватні API paths блокуються на proxy.
 
 ## Конфігурація
 
@@ -34,13 +38,18 @@ Next.js catch-all. Зовнішній TLS завершує Coolify proxy. Не �
 
 - ASP.NET Core environment, PostgreSQL connection string.
 - Telegram bot token, окремий webhook secret, bot username, публічний Mini App URL.
+- Приватний backend URL для бота та окремий service API key. Розподіл
+  секретів між сервісами визначено в [security.md](security.md).
+- Серверний OpenRouter API key, model IDs для транскрипції та текстового
+  розбору, таймаути, ліміти вартості/обсягу й підтримувані audio formats.
 - Публічний origin, довірені proxy, строки auth proof/session/draft.
 - Захищене сховище ASP.NET Core Data Protection keys.
 - PostgreSQL credentials; моніторинг і рівень logging без персональних payloads.
 
 Версії runtime, SDK, NuGet/npm пакетів і container base images фіксуй;
-не використовуй `latest`. Node.js має бути сумісним із вибраною Next.js.
-Lockfiles обов'язкові; frontend build використовує frozen install / `npm ci`.
+не використовуй `latest`. Node.js має бути сумісним із вибраною Next.js;
+Python — із вибраною aiogram 3.x. Lockfiles обов'язкові: frontend build
+використовує frozen install / `npm ci`, бот — `uv sync --frozen --no-dev`.
 
 ## Запуск і міграції
 
@@ -48,7 +57,9 @@ Lockfiles обов'язкові; frontend build використовує frozen 
 2. Перед зміною схеми переконайся, що є придатна резервна копія.
 3. Один deployment job застосовує міграції до готової БД; лише успішне
    завершення дозволяє запустити нову версію backend.
-4. Запусти backend і frontend та перевір readiness через публічний origin.
+4. Запусти backend, aiogram-бота й frontend. Перевір readiness backend,
+   приватне з'єднання бота та публічні маршрути, включно з відмовою доступу
+   до `/internal/bot/*` через публічний origin.
 5. Окремою явною deployment-дією зареєструй Telegram webhook і Mini App URL.
    Не викликай `setWebhook` на старті кожної replica. Реєстрація не повинна
    неявно очищати pending updates.
@@ -70,7 +81,7 @@ Lockfiles обов'язкові; frontend build використовує frozen 
   дані не зберігаються у файловій системі ephemeral containers.
 - Persistent volumes для PostgreSQL і Data Protection keys; автоматичні
   резервні копії зберігаються поза хостом. Перевіряй відновлення.
-- Початково одна backend replica. Масштабування вимагає спільних keys,
+- Початково одна backend та одна bot replica. Масштабування вимагає спільних keys,
   коректного locking/claiming inbox/outbox і конкурентного контролю діалогів.
 - Міграції мають зберігати сумісність під час оновлення. Rollback image
   не відкочує БД; плануй expand/contract для несумісних змін.
@@ -82,3 +93,7 @@ Lockfiles обов'язкові; frontend build використовує frozen 
 
 Деплой не вважається перевіреним лише тому, що Docker images зібралися:
 потрібні HTTPS, правильний routing, cookie/CSRF і реальний Telegram запуск.
+
+Реалізовані Compose, gateway, production environment і порядок запуску описані
+в [операційній інструкції](../docs/deployment.md). Вона уточнює цю топологію;
+локальний smoke не є підтвердженням deployment у Coolify.

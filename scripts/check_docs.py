@@ -18,11 +18,10 @@ HEADING = re.compile(r"^# (.+)$", re.MULTILINE)
 
 
 def markdown_files() -> list[Path]:
-    return sorted(
-        path
-        for path in ROOT.rglob("*.md")
-        if ".git" not in path.parts and "output" not in path.parts
-    )
+    paths = list(ROOT.glob("*.md"))
+    for directory in (".agents", "docs", "scripts"):
+        paths.extend((ROOT / directory).rglob("*.md"))
+    return sorted(paths)
 
 
 def records() -> tuple[list[tuple[int, Path, str]], list[str]]:

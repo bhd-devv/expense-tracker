@@ -51,7 +51,7 @@ third-party cookies не обходь перенесенням session token д�
 
 ## Вхід через бота
 
-- Приймай updates через HTTPS webhook із перевіркою
+- Aiogram-сервіс приймає updates через HTTPS webhook із перевіркою
   `X-Telegram-Bot-Api-Secret-Token` проти окремого випадкового секрету.
   Не використовуй bot token у URL webhook.
 - Після перевірки webhook підтримуй фінансові дії лише в особистих чатах,
@@ -62,10 +62,36 @@ third-party cookies не обходь перенесенням session token д�
 - Зв'язування з User відбувається на сервері. Webhook secret автентифікує
   доставку Telegram, а серверна ownership-перевірка — конкретну операцію.
 
+## Межа довіри aiogram → .NET
+
+- Бот є довіреним серверним адаптером із правом передати перевірений
+  Telegram actor context. Для нього використовуй окремий service credential,
+  відмінний від bot token, webhook secret і browser session cookie.
+- Початковий механізм — випадковий API key у заголовку Authorization для
+  окремої ASP.NET Core authentication scheme/policy. Використовуй стандартний
+  генератор випадкових байтів і constant-time comparison; не пиши власні
+  HMAC/JWT-схеми. Ключ зберігається у secrets обох сервісів і має ротацію.
+- Приватні `/internal/bot/*` endpoints доступні лише в Docker network;
+  proxy не публікує їх і backend port не відкритий напряму назовні.
+  Service credential обов'язковий навіть у приватній мережі. Якщо сервіси
+  розміщено на різних хостах, передавай запити через захищений TLS-канал.
+- `from.id` потрапляє до цих endpoints лише після перевірки Telegram update
+  aiogram-сервісом. Service key доводить походження від бота, а не право на
+  довільну фінансову дію: backend встановлює User за actor context і перевіряє
+  ownership записів, категорій, рахунків, діалогів і callbacks.
+- Browser endpoints не приймають service headers або довільний Telegram ID
+  як спосіб входу. Bot endpoints не створюють browser sessions і не видають
+  боту права адміністратора або доступ до користувацьких даних без actor scope.
+- Aiogram не доводить особу Mini App. Перевірка підпису `initData`, replay
+  protection і browser session лишаються в .NET. Bot token потрібний aiogram
+  для Telegram API та backend для перевірки Mini App; webhook secret потрібний
+  лише aiogram. DB credentials і Data Protection keys потрібні лише backend;
+  OpenRouter key також залишається лише в .NET.
+
 ## Захист API та даних
 
 - Публічні Next.js і `/api/*` розміщуй на одному origin. Bot webhook —
-  окремий endpoint backend, автентифікований webhook secret, без browser cookie.
+  окремий endpoint aiogram, автентифікований webhook secret, без browser cookie.
 - Усі browser-запити, що змінюють стан, захищай ASP.NET Core Antiforgery
   із request token у заголовку. Login endpoint також захищай від login CSRF:
   встанови анонімний antiforgery context перед обміном `initData`.
@@ -77,7 +103,7 @@ third-party cookies не обходь перенесенням session token д�
 - `callback_data`, `start_param` і deep links — недовірені дані; вони не
   надають права доступу. Службові одноразові токени мають TTL і прив'язку
   до власника, конкретної дії та чернетки/версії сутності.
-- Обмежуй розмір запитів, частоту auth спроб і команд на користувача.
+- Обмежуй розмір запитів, частоту auth спроб і дій на користувача.
   Webhook ingress також потребує загального ліміту й захисту від перевантаження.
 - Bot token, DB credentials, webhook secret і Data Protection keys доступні
   лише серверу. Заборонено `NEXT_PUBLIC_*` для секретів.

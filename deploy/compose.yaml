@@ -86,9 +86,10 @@ services:
       timeout: 5s
       retries: 5
   gateway:
-    image: caddy:2.10.2-alpine
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    image: expense-tracker-gateway:${RELEASE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deploy/gateway.Dockerfile
     expose: [8080]
     networks:
       private:

@@ -3,6 +3,7 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 013 — [Caddyfile у gateway image замість host bind mount](../.agents/changelog/013-gateway-config-in-image.md)
 - 012 — [Шляхи Compose від кореня checkout для Coolify](../.agents/changelog/012-coolify-compose-project-directory.md)
 - 011 — [Локальні перевірки за запитом замість GitHub Actions](../.agents/changelog/011-local-checks-without-github-actions.md)
 - 010 — [Фіксовані GPT Luna та бюджетна STT-модель у серверному конфігу](../.agents/changelog/010-pinned-ai-models-and-stt.md)

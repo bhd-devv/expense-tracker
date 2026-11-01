@@ -5,8 +5,10 @@
 Проєкт має розгортатися як Docker Compose application у Coolify.
 Під час реалізації додай `deploy/compose.yaml` і окремі multi-stage Dockerfile
 для backend, frontend та окремий production Dockerfile для Python/aiogram
-бота. База відносних Compose paths — корінь репозиторію через
-`--project-directory`: `build.context: .`, bind mount `./deploy/Caddyfile`.
+бота. Gateway має окремий `deploy/gateway.Dockerfile`, який копіює Caddyfile
+в image; host bind mount для конфігурації не використовується. База
+відносних Compose paths — корінь репозиторію через
+`--project-directory`: `build.context: .`.
 Dockerfile paths рахуються від build context. Локальні команди запускай із
 кореня з `--project-directory .`, як у Coolify. Base Directory — `/`,
 Compose Location — `/deploy/compose.yaml`. Перевір реальний build у Coolify.

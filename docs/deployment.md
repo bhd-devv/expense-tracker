@@ -2,16 +2,24 @@
 
 Використовуйте Docker Compose application із файлом `deploy/compose.yaml`.
 Build context — корінь репозиторію. Конфігурація має окремі images для API,
-Mini App і aiogram, PostgreSQL, одноразовий migrate та Caddy gateway.
+Mini App, aiogram і Caddy gateway, PostgreSQL та одноразовий migrate.
 
 У Coolify задайте **Base Directory `/`**, **Docker Compose Location
 `/deploy/compose.yaml`**. Coolify передає корінь checkout як
-`--project-directory`, тому `build.context: .` і bind mount
-`./deploy/Caddyfile` рахуються від кореня репозиторію. Dockerfile paths
+`--project-directory`, тому `build.context: .` рахується від кореня
+репозиторію. Dockerfile paths
 рахуються від build context. Локальні Compose-команди нижче запускайте з
 кореня з `--project-directory .`, щоб отримати той самий результат.
 `context: ..` у цьому режимі виходить за межі checkout і спричиняє
 `lstat /artifacts/src: no such file or directory`.
+
+Gateway збирається через [gateway.Dockerfile](../deploy/gateway.Dockerfile):
+[Caddyfile](../deploy/Caddyfile) копіюється в image під час збірки.
+Bind mount цього файла з deployment-хоста не потрібний: checkout у helper
+container не гарантує наявності файла за відповідним шляхом на Docker host.
+Після зміни routing перебудуйте й перевипустіть gateway image. Якщо раніше
+Coolify створив помилковий каталог `deploy/Caddyfile`, новий Compose його
+більше не монтує; прибирати його для цього виправлення не потрібно.
 
 ## Налаштування
 

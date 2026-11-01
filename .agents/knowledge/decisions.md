@@ -103,7 +103,10 @@
   Короткі фінансові/catalogue мутації серіалізуються advisory lock власника;
   він не утримується під час AI/Telegram I/O.
 - **Наслідки:** ще один невеликий контейнер і контрольований private IP;
-  правила маршрутизації версіонуються в репозиторії. HTTPS і Telegram
+  правила маршрутизації версіонуються в репозиторії й копіюються в gateway
+  image через `deploy/gateway.Dockerfile`. Host bind mount Caddyfile не
+  використовується: Coolify helper checkout і filesystem Docker host
+  можуть відрізнятися. Зміна routing потребує перебудови gateway. HTTPS і Telegram
   клієнти потребують перевірки після справжнього deployment.
 - **Контракт запуску:** [deployment](../../docs/deployment.md).
 

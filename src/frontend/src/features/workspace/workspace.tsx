@@ -122,6 +122,7 @@ function Money({
 function errorText(error: unknown, t: Copy) {
   if (!(error instanceof ApiError)) return t.connection;
   if (error.code === "unknown") return t.unknown;
+  if (error.code === "telegram_required") return t.telegramLaunch;
   if (error.status === 401) return t.signInBody;
   if (error.status === 429) return t.rateLimit;
   if (error.code === "draft_expired") return t.expired;
@@ -384,7 +385,7 @@ export default function Workspace() {
               className="button primary"
               href={
                 botName
-                  ? `https://t.me/${encodeURIComponent(botName)}`
+                  ? `https://t.me/${encodeURIComponent(botName)}?start=app`
                   : "https://t.me/"
               }
             >

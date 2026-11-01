@@ -81,6 +81,17 @@ callback_query, задає menu Web App та зберігає pending updates. �
 її для production бота з локального середовища. Один бот має один webhook.
 Окрема назва `bot-register` дає one-shot команді власний log file у bot volume.
 
+Для входу відкривайте Mini App кнопкою **під повідомленням** бота або
+menu button **Lime** біля поля введення. Reply `web_app` запуск не передає
+підписаного `initData`. Після оновлення бота надішліть `/start`, щоб він
+замінив стару reply keyboard й показав правильну inline-кнопку.
+Пункт «Відкрити застосунок» у новій reply keyboard спершу надсилає таку кнопку.
+
+Якщо в логах є лише `401 /api/auth/me` і `200 /api/config`, але немає
+`/api/auth/csrf` та `POST /api/auth/telegram`, login ще не був надісланий:
+перевірте спосіб відкриття Mini App. `204` у `/queues/*/claim` означає
+порожню чергу, а не помилку бота. Не копіюйте `initData` в URL або logs.
+
 ## Smoke після release
 
 - `/api/health/ready` → 200; `/internal/bot/actor/profile` через public origin → 404.

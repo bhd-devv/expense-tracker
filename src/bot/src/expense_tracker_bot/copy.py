@@ -9,6 +9,7 @@ COPY = {
         "accounts": "💳 Accounts",
         "settings": "⚙️ Settings",
         "app": "📱 Open app",
+        "openAppPrompt": "Open the app using the button below to sign in securely.",
         "welcome": (
             "A little clarity. Every day.\nSend a description or a voice note to add an expense."
         ),
@@ -104,6 +105,7 @@ COPY = {
         "accounts": "💳 Рахунки",
         "settings": "⚙️ Налаштування",
         "app": "📱 Відкрити застосунок",
+        "openAppPrompt": "Відкрийте застосунок кнопкою нижче для безпечного входу.",
         "welcome": "Трохи ясності. Щодня.\nНадішліть опис або голосове, щоб додати витрату.",
         "prompt": (
             "Надішліть витрату текстом або голосом. Підставимо сьогоднішню дату й "

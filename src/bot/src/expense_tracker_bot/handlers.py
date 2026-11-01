@@ -10,6 +10,7 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
     CallbackQuery,
+    InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
     Message,
@@ -64,16 +65,22 @@ def keyboard(rows: list[tuple[str, Action]], width: int = 2) -> InlineKeyboardMa
     return builder.as_markup()
 
 
-def menu(t: dict[str, str], url: str) -> ReplyKeyboardMarkup:
+def menu(t: dict[str, str]) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=t["add"]), KeyboardButton(text=t["expenses"])],
             [KeyboardButton(text=t["reports"]), KeyboardButton(text=t["categories"])],
             [KeyboardButton(text=t["accounts"]), KeyboardButton(text=t["settings"])],
-            [KeyboardButton(text=t["app"], web_app=WebAppInfo(url=url))],
+            [KeyboardButton(text=t["app"])],
         ],
         resize_keyboard=True,
         is_persistent=True,
+    )
+
+
+def app_keyboard(t: dict[str, str], url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=t["app"], web_app=WebAppInfo(url=url))]]
     )
 
 
@@ -334,7 +341,7 @@ async def input_value(
         updated = await api.mutate("PUT", "/profile", ProfileDto, body)
         await state(api, "idle")
         await message.answer(
-            COPY[updated.language]["welcome"], reply_markup=menu(COPY[updated.language], app_url)
+            COPY[updated.language]["welcome"], reply_markup=menu(COPY[updated.language])
         )
         await settings(message, api, updated, COPY[updated.language])
     elif conversation.state == "period":
@@ -346,7 +353,7 @@ async def input_value(
         await browse(message, api, t, mode)
 
 
-async def seed_demo(message: Message, api: Api, t: dict[str, str], app_url: str) -> None:
+async def seed_demo(message: Message, api: Api, t: dict[str, str]) -> None:
     try:
         result = await api.mutate("POST", "/seed", SeedResultDto, {})
     except ApiError as error:
@@ -365,16 +372,16 @@ async def seed_demo(message: Message, api: Api, t: dict[str, str], app_url: str)
     summary = (
         t["seedAdded"].format(count=result.createdCount) if result.createdCount else t["seedExists"]
     )
-    await message.answer(summary + "\n" + t["seedPeriod"], reply_markup=menu(t, app_url))
+    await message.answer(summary + "\n" + t["seedPeriod"], reply_markup=menu(t))
 
 
 @router.message(F.chat.type == "private", Command("seed"))
-async def handle_seed(message: Message, api_client: httpx.AsyncClient, app_url: str) -> None:
+async def handle_seed(message: Message, api_client: httpx.AsyncClient) -> None:
     if not message.from_user or message.from_user.is_bot:
         return
     api = Api(api_client, message.from_user.id, message.from_user.language_code or "uk")
     _, t = await profile_context(api)
-    await seed_demo(message, api, t, app_url)
+    await seed_demo(message, api, t)
 
 
 @router.message(F.chat.type == "private")
@@ -414,11 +421,15 @@ async def handle_message(
                 await catalogs(message, api, t, selected)
             elif selected == "settings":
                 await settings(message, api, profile, t)
+            elif selected == "app":
+                await message.answer(t["openAppPrompt"], reply_markup=app_keyboard(t, app_url))
             else:
                 await message.answer(
                     t["prompt"] if selected == "add" else t["welcome"],
-                    reply_markup=menu(t, app_url),
+                    reply_markup=menu(t),
                 )
+                if text.split(maxsplit=1)[0].split("@", 1)[0] == "/start":
+                    await message.answer(t["openAppPrompt"], reply_markup=app_keyboard(t, app_url))
             return
         conversation = await api.get("/conversation", ConversationDto)
         if conversation.state in ("record", "new", "rename", "preference", "period"):
@@ -450,7 +461,7 @@ async def handle_message(
                 {"requestId": request_id, "text": text, "accountId": None},
             )
         else:
-            await message.answer(t["prompt"], reply_markup=menu(t, app_url))
+            await message.answer(t["prompt"], reply_markup=menu(t))
             return
         await state(api, "idle")
         await show_record(message, api, "d", str(draft.id), t)
@@ -516,7 +527,7 @@ async def handle_callback(
     logger.info("Callback action", extra={"details": {"action": action}})
     try:
         if data.action == "seed":
-            await seed_demo(message, api, t, app_url)
+            await seed_demo(message, api, t)
         elif data.action in ("open", "save", "delete", "remove", "cancel", "field", "pick"):
             kind = data.field.split(".")[0]
             record = await get_record(api, kind, data.entity)
@@ -552,7 +563,7 @@ async def handle_callback(
                 )
                 await state(api, "idle")
                 await message.edit_reply_markup(reply_markup=None)
-                await message.answer(t["welcome"], reply_markup=menu(t, app_url))
+                await message.answer(t["welcome"], reply_markup=menu(t))
             elif data.action == "delete":
                 await message.answer(
                     f"{t['delete']}? {record.description} · {record.amount} {record.currency}",
@@ -601,7 +612,7 @@ async def handle_callback(
                     )
         elif data.action == "reset":
             await state(api, "idle")
-            await message.answer(t["welcome"], reply_markup=menu(t, app_url))
+            await message.answer(t["welcome"], reply_markup=menu(t))
         elif data.action in ("browse", "page"):
             await browse(
                 message,
@@ -813,7 +824,7 @@ async def handle_callback(
             profile = await api.mutate("PUT", "/profile", ProfileDto, body)
             await state(api, "idle")
             t = COPY[profile.language]
-            await message.answer(t["welcome"], reply_markup=menu(t, app_url))
+            await message.answer(t["welcome"], reply_markup=menu(t))
             await settings(message, api, profile, t)
     except ApiError as error:
         log_failure(logger, "Callback action rejected", error, status=error.status)

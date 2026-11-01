@@ -9,7 +9,15 @@ import pytest
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, SendMessage
-from aiogram.types import CallbackQuery, Chat, InlineKeyboardMarkup, Message, Update, User
+from aiogram.types import (
+    CallbackQuery,
+    Chat,
+    InlineKeyboardMarkup,
+    Message,
+    ReplyKeyboardMarkup,
+    Update,
+    User,
+)
 
 from expense_tracker_bot.api import Api
 from expense_tracker_bot.copy import COPY
@@ -100,6 +108,78 @@ async def test_real_backend_draft_edit_confirm_and_duplicate_callback() -> None:
         expenses = await api.get("/expenses", ExpensePage)
         assert len(expenses.items) == 1
         assert expenses.items[0].amount == "75"
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+@pytest.mark.parametrize("entry", ["menu", "start"])
+async def test_app_launch_uses_inline_web_app_and_preserves_reply_menu(
+    language: str, entry: str
+) -> None:
+    calls: list[str] = []
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        assert request.headers["X-Telegram-User-Id"] == "42"
+        if request.url.path == "/internal/bot/actor/profile":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "defaultAccountId": None,
+                    "aiConsent": False,
+                    "version": 1,
+                    "today": "2026-11-01",
+                },
+            )
+        assert request.url.path == "/internal/bot/actor/conversation"
+        return httpx.Response(
+            200,
+            json={
+                "state": "idle",
+                "entityId": None,
+                "field": None,
+                "version": 1 if request.method == "PUT" else 0,
+            },
+        )
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    message = Message(
+        message_id=1,
+        date=datetime.now(UTC),
+        chat=Chat(id=42, type="private"),
+        from_user=User(id=42, is_bot=False, first_name="Synthetic", language_code=language),
+        text=COPY[language]["app"] if entry == "menu" else "/start app",
+    ).as_(bot)
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        await handle_message(
+            message, client, "https://example.com", Update(update_id=1, message=message), bot
+        )
+    assert calls == [
+        "/internal/bot/actor/profile",
+        "/internal/bot/actor/conversation",
+        "/internal/bot/actor/conversation",
+    ]
+    sent = session.sent[-1]
+    assert isinstance(sent, SendMessage)
+    assert sent.text == COPY[language]["openAppPrompt"]
+    assert isinstance(sent.reply_markup, InlineKeyboardMarkup)
+    launch = sent.reply_markup.inline_keyboard[0][0]
+    assert launch.web_app is not None
+    assert launch.web_app.url == "https://example.com"
+    if entry == "start":
+        assert len(session.sent) == 2
+        reply = session.sent[0].reply_markup
+        assert isinstance(reply, ReplyKeyboardMarkup)
+        assert reply.is_persistent
+        assert all(button.web_app is None for row in reply.keyboard for button in row)
     await bot.session.close()
 
 

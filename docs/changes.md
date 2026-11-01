@@ -3,6 +3,7 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 017 — [Вхід Mini App через inline-кнопку замість reply web_app](../.agents/changelog/017-telegram-inline-launch.md)
 - 016 — [Детальні логи в Coolify та щоденні gzip-архіви](../.agents/changelog/016-detailed-logging-daily-archives.md)
 - 015 — [Стандартна ідентичність сесії для Antiforgery](../.agents/changelog/015-session-antiforgery-identity.md)
 - 014 — [Демовитрати за жовтень через /seed](../.agents/changelog/014-october-demo-seed.md)

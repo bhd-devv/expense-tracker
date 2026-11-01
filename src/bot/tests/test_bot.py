@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from expense_tracker_bot.api import Api
 from expense_tracker_bot.copy import COPY
-from expense_tracker_bot.handlers import Action, button, keyboard, menu
+from expense_tracker_bot.handlers import Action, app_keyboard, button, keyboard, menu
 from expense_tracker_bot.main import minimal_update
 from expense_tracker_bot.models import ProfileDto
 
@@ -64,9 +64,12 @@ def test_callback_identity_is_sender_and_all_callbacks_fit() -> None:
     assert reconstructed.callback_query.from_user.id == 12
     for lang in COPY:
         t = COPY[lang]
-        reply = menu(t, "https://example.com")
+        reply = menu(t)
         assert reply.is_persistent and reply.resize_keyboard
-        assert reply.keyboard[-1][0].web_app is not None
+        assert reply.keyboard[-1][0].text == t["app"]
+        assert all(button.web_app is None for row in reply.keyboard for button in row)
+        launch = app_keyboard(t, "https://example.com").inline_keyboard[0][0]
+        assert launch.web_app is not None and launch.web_app.url == "https://example.com"
         for field in ("amount", "description", "accountId", "categoryId", "date"):
             packed = Action(
                 action="field", entity="a" * 32, field="d." + field, version=100000

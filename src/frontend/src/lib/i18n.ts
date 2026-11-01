@@ -75,6 +75,8 @@ const en = {
   openTelegram: "Open in Telegram",
   signInTitle: "Your expenses",
   signInBody: "Open in Telegram to sign in securely.",
+  telegramLaunch:
+    "Return to the bot and open the app with the button below its message or the Lime menu button next to the message field.",
   retry: "Try again",
   loading: "Loading…",
   connection: "Unable to connect. Check your connection and try again.",
@@ -176,6 +178,8 @@ const uk: typeof en = {
   openTelegram: "Відкрити в Telegram",
   signInTitle: "Ваші витрати",
   signInBody: "Відкрийте в Telegram для безпечного входу.",
+  telegramLaunch:
+    "Поверніться до бота й відкрийте застосунок кнопкою під його повідомленням або кнопкою меню Lime біля поля введення.",
   retry: "Спробувати ще",
   loading: "Завантаження…",
   connection:

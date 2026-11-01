@@ -10,7 +10,9 @@ Username, телефон, ім'я, `chat_id`, query-параметр `userId` а
 
 ## Вхід Mini App
 
-1. Користувач відкриває HTTPS Mini App через `web_app` кнопку Telegram.
+1. Користувач відкриває HTTPS Mini App через inline `web_app` кнопку Telegram
+   або menu button бота. Запуск через reply `KeyboardButton.web_app` не
+   передає `initData` і не використовується для входу.
    Client boundary отримує сирий `Telegram.WebApp.initData` із Telegram SDK.
 2. Передай його один раз у тілі `POST /api/auth/telegram` через TLS.
    Не передавай через URL і не записуй у logs, analytics або сховище браузера.

@@ -20,8 +20,17 @@
 ```
 
 Для головної keyboard використовуй `resize_keyboard` і підтримуваний
-Telegram параметр persistence. Кнопка застосунку — `web_app` із HTTPS URL
-Mini App. Також можна налаштувати menu button бота для відкриття застосунку.
+Telegram параметр persistence. «Відкрити застосунок» у reply keyboard —
+звичайна текстова кнопка: бот відповідає повідомленням з inline `web_app`
+кнопкою із HTTPS URL. `/start`, зокрема `/start app`, також показує цю
+inline-кнопку. Menu button Lime біля поля введення відкриває той самий Mini App.
+
+Не використовуй `KeyboardButton.web_app` для цього входу: при запуску з reply
+keyboard Telegram залишає `WebAppInitData` порожнім. Inline web_app та
+menu button передають дані для перевірки на backend. Це властивість
+[Telegram launch modes](https://core.telegram.org/bots/webapps#webappinitdata),
+а не проблема domain або session cookie. Після оновлення бота `/start`
+замінює стару reply keyboard; старі web_app-кнопки не змінюються самі.
 
 Усі контекстні дії — `InlineKeyboardMarkup`: вибір категорії, рахунку,
 періоду, пагінація, зміна, видалення, підтвердження, «Назад», «Скасувати».

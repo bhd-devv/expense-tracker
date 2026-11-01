@@ -62,6 +62,10 @@ Bot environment: `BOT_TOKEN`, `BOT_SERVICE_KEY`, `BOT_WEBHOOK_SECRET`,
 
 ## Перевірки
 
+Перевірки запускаються локально за явним запитом користувача.
+GitHub Actions у репозиторії відсутні; push і pull request не запускають
+цей набір перевірок. Тести та команди нижче збережені для ручного запуску.
+
 ```bash
 # Окрема тестова БД; ім’я обов’язково завершується на _test.
 export EXPENSE_TEST_DATABASE='Host=127.0.0.1;Database=expenses_test;Username=expenses;Password=local-dev-only'
@@ -75,7 +79,9 @@ python3 scripts/check_docs.py --check
 
 PostgreSQL-тести пропускаються без `EXPENSE_TEST_DATABASE`. Інтеграційний
 тест handlers потребує запущеного API **на ізольованій тестовій БД** з
-синтетичними credentials із CI та `EXPENSE_BOT_TEST_URL=http://127.0.0.1:5085/internal/bot/`.
+синтетичними credentials, узгодженими з
+[інтеграційним тестом](src/bot/tests/test_handlers_integration.py), та
+`EXPENSE_BOT_TEST_URL=http://127.0.0.1:5085/internal/bot/`.
 Він використовує підмінний Telegram transport і не надсилає повідомлень людям.
 
 Контракти генеруються з Development API:
@@ -85,7 +91,8 @@ python3 scripts/generate_contracts.py
 ```
 
 Це оновлює [OpenAPI](contracts/openapi.json), TypeScript DTO та Python-моделі.
-CI повторює генерацію і перевіряє відсутність різниці.
+Під час локальної перевірки контрактів повторіть генерацію та перевірте
+відсутність різниці в цих трьох файлах.
 
 ## Межі першої версії
 

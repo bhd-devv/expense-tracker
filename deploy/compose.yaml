@@ -1,8 +1,10 @@
+# Paths use the repository root, as in Coolify's --project-directory.
+# Locally: docker compose --project-directory . --env-file .env -f deploy/compose.yaml ...
 name: expense-tracker
 x-backend: &backend
   image: expense-tracker-api:${RELEASE_TAG:-local}
   build:
-    context: ..
+    context: .
     dockerfile: src/backend/ExpenseTracker.Api/Dockerfile
   environment: &backend-env
     ASPNETCORE_ENVIRONMENT: Production
@@ -53,7 +55,7 @@ services:
   frontend:
     image: expense-tracker-web:${RELEASE_TAG:-local}
     build:
-      context: ..
+      context: .
       dockerfile: src/frontend/Dockerfile
     networks: [private]
     restart: unless-stopped
@@ -65,7 +67,7 @@ services:
   bot:
     image: expense-tracker-bot:${RELEASE_TAG:-local}
     build:
-      context: ..
+      context: .
       dockerfile: src/bot/Dockerfile
     environment:
       BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?required}
@@ -86,7 +88,7 @@ services:
   gateway:
     image: caddy:2.10.2-alpine
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
     expose: [8080]
     networks:
       private:

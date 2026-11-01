@@ -4,6 +4,15 @@
 Build context — корінь репозиторію. Конфігурація має окремі images для API,
 Mini App і aiogram, PostgreSQL, одноразовий migrate та Caddy gateway.
 
+У Coolify задайте **Base Directory `/`**, **Docker Compose Location
+`/deploy/compose.yaml`**. Coolify передає корінь checkout як
+`--project-directory`, тому `build.context: .` і bind mount
+`./deploy/Caddyfile` рахуються від кореня репозиторію. Dockerfile paths
+рахуються від build context. Локальні Compose-команди нижче запускайте з
+кореня з `--project-directory .`, щоб отримати той самий результат.
+`context: ..` у цьому режимі виходить за межі checkout і спричиняє
+`lstat /artifacts/src: no such file or directory`.
+
 ## Налаштування
 
 1. Задайте змінні з [.env.example](../.env.example) у Coolify secrets.
@@ -37,8 +46,8 @@ Mini App і aiogram, PostgreSQL, одноразовий migrate та Caddy gatew
 5. Перевірте конфігурацію та зберіть images:
 
    ```bash
-   docker compose --env-file .env -f deploy/compose.yaml config --quiet
-   docker compose --env-file .env -f deploy/compose.yaml build
+   docker compose --project-directory . --env-file .env -f deploy/compose.yaml config --quiet
+   docker compose --project-directory . --env-file .env -f deploy/compose.yaml build
    ```
 
 `migrate` чекає health PostgreSQL, застосовує початкову міграцію й завершується.
@@ -55,7 +64,7 @@ Backend стартує лише після `service_completed_successfully`. П�
 маршрутів зареєструйте webhook **окремою явною дією**:
 
 ```bash
-docker compose --env-file .env -f deploy/compose.yaml run --rm bot \
+docker compose --project-directory . --env-file .env -f deploy/compose.yaml run --rm bot \
   python -m expense_tracker_bot.main register-webhook
 ```
 

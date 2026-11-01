@@ -3,6 +3,8 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 012 — [Шляхи Compose від кореня checkout для Coolify](../.agents/changelog/012-coolify-compose-project-directory.md)
+- 011 — [Локальні перевірки за запитом замість GitHub Actions](../.agents/changelog/011-local-checks-without-github-actions.md)
 - 010 — [Фіксовані GPT Luna та бюджетна STT-модель у серверному конфігу](../.agents/changelog/010-pinned-ai-models-and-stt.md)
 - 009 — [Username бота з Telegram замість окремої конфігурації](../.agents/changelog/009-telegram-bot-username-from-token.md)
 - 008 — [Виразніший і читабельніший Mini App за Impeccable](../.agents/changelog/008-impeccable-interface-polish.md)

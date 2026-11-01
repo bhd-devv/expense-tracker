@@ -11,11 +11,8 @@ x-backend: &backend
     App__KeyPath: /keys
     App__KnownProxies__0: 172.30.19.2
     Telegram__BotToken: ${TELEGRAM_BOT_TOKEN:?required}
-    Telegram__BotUsername: ${TELEGRAM_BOT_USERNAME:?required}
     Telegram__ServiceKey: ${BOT_SERVICE_KEY:?required}
     OpenRouter__ApiKey: ${OPENROUTER_API_KEY:?required}
-    OpenRouter__TextModel: ${OPENROUTER_TEXT_MODEL:?required}
-    OpenRouter__AudioModel: ${OPENROUTER_AUDIO_MODEL:?required}
   volumes:
     - data-protection:/keys
   networks: [private]

@@ -16,7 +16,8 @@ public static class AuthEndpoints
 {
     public static void MapAuth(this WebApplication app)
     {
-        app.MapGet("/api/config", (IConfiguration config) => new PublicConfigDto(config["Telegram:BotUsername"] ?? ""));
+        app.MapGet("/api/config", async (TelegramBotIdentity bot, CancellationToken ct) =>
+            new PublicConfigDto(await bot.GetUsername(ct)));
         app.MapGet("/api/auth/csrf", (HttpContext context, IAntiforgery csrf) =>
             new CsrfDto(csrf.GetAndStoreTokens(context).RequestToken ?? throw new InvalidOperationException("No antiforgery token")));
         app.MapGet("/api/auth/me", async (HttpContext context, UserService users, CancellationToken ct) =>

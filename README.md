@@ -31,9 +31,8 @@ docker run -d --name lime-dev-db \
 export ConnectionStrings__Database='Host=127.0.0.1;Database=expenses_dev;Username=expenses;Password=local-dev-only'
 export App__Origin=http://localhost:3000
 export Telegram__BotToken='<окремий тестовий bot token>'
-export Telegram__BotUsername='<ім’я тестового бота без @>'
 export Telegram__ServiceKey='<випадковий service key, щонайменше 32 символи>'
-# Для AI додайте OpenRouter__ApiKey, OpenRouter__TextModel, OpenRouter__AudioModel.
+# Для AI додайте OpenRouter__ApiKey; моделі вже задані в appsettings.json.
 dotnet run --project src/backend/ExpenseTracker.Api -- --environment Development --migrate
 dotnet run --project src/backend/ExpenseTracker.Api -- --environment Development --urls http://127.0.0.1:5085
 ```
@@ -45,6 +44,8 @@ dotnet run --project src/backend/ExpenseTracker.Api -- --environment Development
 ```
 
 Вхід поза Telegram показує стартовий екран. Обхідної dev-авторизації немає.
+Username бота backend отримує через Telegram `getMe` за bot token і кешує
+до перезапуску. Для кнопки переходу до бота не потрібна окрема env-змінна.
 Для живого Mini App потрібен HTTPS origin із доступом до API, окремий
 тестовий бот та запуск його Web App у Telegram. Cookie сесії залишаються
 на backend; frontend не зберігає Telegram proof або session token.
@@ -90,10 +91,14 @@ CI повторює генерацію і перевіряє відсутніс�
 
 AI за замовчуванням вимкнений до згоди користувача. Без конфігурації
 OpenRouter текстову чернетку можна заповнити вручну; голос потребує згоди
-та придатної моделі. Модель має підтримувати `input_audio` (для голосу),
-strict JSON schema і routing `data_collection=deny`. Підтримку обраних
-model IDs потрібно перевірити живим викликом; жодна конкретна модель не
-підставляється навмання. Установіть бюджет ключа в OpenRouter.
+та придатної моделі. У [серверному конфігу](src/backend/ExpenseTracker.Api/appsettings.json)
+зафіксовано `openai/gpt-6-luna` для розбору тексту та
+`google/gemini-3.1-flash-lite` для транскрипції українського й англійського
+голосу. Голос спочатку транскрибується, потім текст розбирає Luna.
+У env потрібен лише ключ OpenRouter; ID моделей туди не додаються.
+Обидва запити використовують strict JSON schema і `data_collection=deny`.
+Каталог і параметри моделей перевірено; якість STT та доступність конкретного
+ключа потребують живої перевірки перед релізом. Установіть бюджет ключа в OpenRouter.
 
 Локальні перевірки не замінюють Telegram Android/iOS/Desktop/Web та HTTPS
 smoke у Coolify. Реальні credentials не були надані; live AI, Telegram

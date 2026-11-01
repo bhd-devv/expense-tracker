@@ -37,11 +37,14 @@ Next.js catch-all. Зовнішній TLS завершує Coolify proxy. Не �
 Початкові групи конфігурації:
 
 - ASP.NET Core environment, PostgreSQL connection string.
-- Telegram bot token, окремий webhook secret, bot username, публічний Mini App URL.
+- Telegram bot token, окремий webhook secret, публічний Mini App URL.
+  Username backend отримує через Telegram `getMe` за токеном і кешує до
+  перезапуску; окрема env-змінна не потрібна.
 - Приватний backend URL для бота та окремий service API key. Розподіл
   секретів між сервісами визначено в [security.md](security.md).
-- Серверний OpenRouter API key, model IDs для транскрипції та текстового
-  розбору, таймаути, ліміти вартості/обсягу й підтримувані audio formats.
+- Серверний OpenRouter API key; model IDs для транскрипції та текстового
+  розбору версіонуються в `appsettings.json`, а не env. Поточний вибір —
+  у [product.md](product.md). Таймаути, ліміти вартості/обсягу й підтримувані audio formats.
 - Публічний origin, довірені proxy, строки auth proof/session/draft.
 - Захищене сховище ASP.NET Core Data Protection keys.
 - PostgreSQL credentials; моніторинг і рівень logging без персональних payloads.

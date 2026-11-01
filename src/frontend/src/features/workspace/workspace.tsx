@@ -17,10 +17,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Leaf,
   LoaderCircle,
   LogOut,
   Mic,
+  Ellipsis,
   Plus,
   RefreshCw,
   Settings2,
@@ -58,6 +60,7 @@ import {
   money,
   records,
   type Copy,
+  type Language,
 } from "@/lib/i18n";
 import { telegram } from "@/lib/telegram";
 
@@ -99,10 +102,28 @@ function CategoryIcon({ code }: { code?: string | null }) {
     code && Object.hasOwn(categoryIcons, code) ? categoryIcons[code] : Tags;
   return <Icon size={22} strokeWidth={1.8} aria-hidden="true" />;
 }
+function Money({
+  amount,
+  currency,
+  lang,
+}: {
+  amount: string;
+  currency: string;
+  lang: Language;
+}) {
+  const formatted = money(amount, currency, lang);
+  return (
+    <span className="money">
+      <span>{formatted.slice(0, -(currency.length + 1))}</span>{" "}
+      <span className="money-currency">{currency}</span>
+    </span>
+  );
+}
 function errorText(error: unknown, t: Copy) {
   if (!(error instanceof ApiError)) return t.connection;
   if (error.code === "unknown") return t.unknown;
   if (error.status === 401) return t.signInBody;
+  if (error.status === 429) return t.rateLimit;
   if (error.code === "draft_expired") return t.expired;
   if (error.status === 409) return t.conflict;
   if (error.code === "ai_consent_required") return t.consentNeeded;
@@ -142,6 +163,7 @@ export default function Workspace() {
     page: 0,
   });
   const [recording, setRecording] = useState(false);
+  const mobileMenu = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const voiceTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -397,34 +419,73 @@ export default function Workspace() {
           lime<span className="brand-dot">.</span>
         </a>
         <nav aria-label={t.brand}>
-          {nav.map(({ key, Icon }) => (
+          {nav.map(({ key, Icon }, index) => (
             <button
               key={key}
               aria-label={t[key]}
               aria-current={tab === key ? "page" : undefined}
               className={tab === key ? "selected" : ""}
+              data-secondary={index >= 3}
               onClick={() => {
                 setFault("");
                 setTab(key);
               }}
             >
-              <Icon size={23} strokeWidth={1.8} />
-              <span>{key === "settings" ? t.settingsNav : t[key]}</span>
+              <Icon size={23} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t[key]}</span>
             </button>
           ))}
+          <button
+            className={`mobile-more ${nav.slice(3).some(({ key }) => key === tab) ? "selected" : ""}`}
+            popoverTarget="mobile-navigation"
+          >
+            <Ellipsis size={23} strokeWidth={1.8} aria-hidden="true" />
+            <span>{t.more}</span>
+          </button>
         </nav>
+        <div
+          id="mobile-navigation"
+          className="mobile-menu"
+          popover="auto"
+          ref={mobileMenu}
+        >
+          {nav.slice(3).map(({ key, Icon }) => (
+            <button
+              key={key}
+              aria-current={tab === key ? "page" : undefined}
+              className={tab === key ? "selected" : ""}
+              onClick={() => {
+                setFault("");
+                setTab(key);
+                mobileMenu.current?.hidePopover();
+              }}
+            >
+              <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
+              <span>{t[key]}</span>
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
       </aside>
       <main className="main-content">
         <header className="topbar">
           <span className="mobile-brand">
-            <Leaf size={23} strokeWidth={1.8} /> lime
+            <span className="brand-mark">
+              <Leaf size={23} strokeWidth={1.8} aria-hidden="true" />
+            </span>
+            lime
           </span>
           <button
             className="icon-button"
             aria-label={t.refresh}
+            disabled={busy}
             onClick={() => void action(load)}
           >
-            <RefreshCw size={21} strokeWidth={1.8} />
+            <RefreshCw
+              className={busy ? "spin" : ""}
+              size={21}
+              strokeWidth={1.8}
+            />
           </button>
         </header>
         {tab === "overview" ? (
@@ -470,10 +531,28 @@ export default function Workspace() {
             </button>
           </div>
         )}
-        {!data ? (
-          <div className="loading">
-            <LoaderCircle className="spin" />
-            {t.loading}
+        {!data && fault ? (
+          <div className="empty">
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => void action(load)}
+            >
+              <RefreshCw size={20} aria-hidden="true" />
+              {t.retry}
+            </button>
+          </div>
+        ) : !data ? (
+          <div className="workspace-skeleton" role="status">
+            <span className="sr-only">{t.loading}</span>
+            <div aria-hidden="true">
+              <div className="skeleton skeleton-label" />
+              <div className="skeleton skeleton-total" />
+              <div className="skeleton skeleton-composer" />
+              <div className="skeleton skeleton-label" />
+              <div className="skeleton skeleton-row" />
+              <div className="skeleton skeleton-row" />
+            </div>
           </div>
         ) : (
           <>
@@ -485,12 +564,20 @@ export default function Workspace() {
                     {data.report.totals.length ? (
                       data.report.totals.map((total) => (
                         <div key={total.currency} className="balance-value">
-                          {money(total.amount, total.currency, lang)}
+                          <Money
+                            amount={total.amount}
+                            currency={total.currency}
+                            lang={lang}
+                          />
                         </div>
                       ))
                     ) : (
                       <div className="balance-value">
-                        {money("0", profile.currency ?? "UAH", lang)}
+                        <Money
+                          amount="0"
+                          currency={profile.currency ?? "UAH"}
+                          lang={lang}
+                        />
                       </div>
                     )}
                   </section>
@@ -599,6 +686,11 @@ export default function Workspace() {
                       }
                     </span>
                   )}
+                  <ChevronDown
+                    className="filter-chevron"
+                    size={20}
+                    aria-hidden="true"
+                  />
                 </summary>
                 <div className="filters" aria-label={t.filters}>
                   <label>
@@ -700,7 +792,11 @@ export default function Workspace() {
                               }).format(new Date(expense.date + "T12:00:00"))}
                             </time>
                             <strong className="expense-amount">
-                              {money(expense.amount, expense.currency, lang)}
+                              <Money
+                                amount={expense.amount}
+                                currency={expense.currency}
+                                lang={lang}
+                              />
                             </strong>
                             <button
                               className="icon-button"
@@ -754,10 +850,14 @@ export default function Workspace() {
                 )}
                 {data.report.totals.map((total) => (
                   <article className="panel report-card" key={total.currency}>
-                    <span className="eyebrow">{t.total}</span>
-                    <h2 className="report-total">
-                      {money(total.amount, total.currency, lang)}
-                    </h2>
+                    <h2 className="report-label">{t.total}</h2>
+                    <div className="report-total">
+                      <Money
+                        amount={total.amount}
+                        currency={total.currency}
+                        lang={lang}
+                      />
+                    </div>
                     <p>{records(total.count, lang)}</p>
                     {data.report.categories
                       .filter((r) => r.currency === total.currency)

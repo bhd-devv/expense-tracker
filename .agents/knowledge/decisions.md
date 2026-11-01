@@ -114,8 +114,37 @@
   підтримка форматів відрізняється між OpenRouter models/providers.
 - **Рішення:** ffmpeg на backend нормалізує дозволені audio containers у
   mono WAV 16 kHz. Ліміти — 10 МБ і 120 с; тимчасові файли очищаються.
-  Chat Completions отримує base64 `input_audio` і strict JSON schema одним
-  запитом для транскрипції та розбору. Model IDs задає environment.
+  Chat Completions отримує base64 `input_audio` і strict JSON schema для
+  транскрипції. Далі транскрипт обробляє текстова модель за ADR-010.
+  Model IDs версіонуються у серверному конфігу.
 - **Наслідки:** frontend і бот не мають provider credentials або власних
   правил транскрипції. Потрібні ffmpeg у runtime image, явна згода
   користувача й перевірка реальної моделі до release.
+
+## ADR-010: фіксовані AI-моделі та окремий STT перед текстовим розбором
+
+- **Статус:** прийнято, 2026-11-01; уточнює ADR-009 за запитом користувача.
+- **Контекст:** користувач обрав найновішу GPT Luna для тексту та якісну
+  бюджетну модель STT для української й англійської; ID мають бути в конфігу.
+- **Варіанти:** одна audio-модель для всього голосового сценарію не
+  застосовувала б Luna до голосових витрат. Окремі provider SDK або прямий
+  STT provider поза OpenRouter не потрібні.
+- **Рішення:** `openai/gpt-6-luna` і `google/gemini-3.1-flash-lite` у
+  [appsettings.json](../../src/backend/ExpenseTracker.Api/appsettings.json).
+  STT отримує лише аудіо; Luna — текст/транскрипт та каталог категорій.
+  Обидва виклики — на backend через OpenRouter, з strict JSON schema,
+  `require_parameters` і `data_collection=deny`, під спільним timeout 75 с.
+  Luna не отримує непідтримуваний `temperature`, reasoning — `none`;
+  Flash-Lite використовує `minimal`. Немає автоматичного fallback/retry.
+- **Доказ вибору:** [офіційна сторінка Luna](https://developers.openai.com/api/docs/models/gpt-6-luna),
+  [каталог OpenRouter](https://openrouter.ai/api/v1/models),
+  [Gemini 3.1 Flash-Lite](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-1-flash-lite)
+  та [аудіоформати OpenRouter](https://openrouter.ai/docs/guides/overview/multimodal/audio).
+  Перевірено 2026-11-01; каталог підтверджує audio input і structured outputs,
+  Google описує покращення ASR та minimal thinking. За каталогом audio input
+  Flash-Lite коштує $0.50/1M tokens, output — $1.50/1M; це не фіксована
+  ціна хвилини. Якість uk/en і доступ конкретного ключа ще не перевірено.
+- **Наслідки:** голос має два послідовні provider-запити; STT failure зупиняє
+  обробку до Luna. API, bot DTO, фінансові інваріанти й БД сумісні,
+  міграція не потрібна. У env залишається лише секретний API key.
+  Чинний продуктовий контракт — [product.md](../product.md).

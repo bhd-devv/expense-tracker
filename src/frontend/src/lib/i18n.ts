@@ -8,7 +8,7 @@ const en = {
   accounts: "Accounts",
   categories: "Categories",
   settings: "Settings",
-  settingsNav: "Settings",
+  more: "More",
   add: "Add",
   monthSpending: "This month",
   recent: "Recent expenses",
@@ -78,6 +78,7 @@ const en = {
   retry: "Try again",
   loading: "Loading…",
   connection: "Unable to connect. Check your connection and try again.",
+  rateLimit: "Too many requests. Wait a minute and try again.",
   conflict:
     "This record has changed. Refresh and check it before saving again.",
   invalid: "Check the entered values and try again.",
@@ -108,7 +109,7 @@ const uk: typeof en = {
   accounts: "Рахунки",
   categories: "Категорії",
   settings: "Налаштування",
-  settingsNav: "Опції",
+  more: "Ще",
   add: "Додати",
   monthSpending: "Цього місяця",
   recent: "Останні витрати",
@@ -179,6 +180,7 @@ const uk: typeof en = {
   loading: "Завантаження…",
   connection:
     "Не вдалося підключитися. Перевірте з’єднання та спробуйте ще раз.",
+  rateLimit: "Забагато запитів. Зачекайте хвилину й спробуйте ще раз.",
   conflict:
     "Запис уже змінився. Оновіть дані та перевірте їх перед збереженням.",
   invalid: "Перевірте введені значення та спробуйте ще раз.",

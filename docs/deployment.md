@@ -10,6 +10,17 @@ Mini App і aiogram, PostgreSQL, одноразовий migrate та Caddy gatew
    `APP_ORIGIN` — точний HTTPS origin без кінцевого `/`, шляху або query.
    Пароль PostgreSQL має бути випадковим; у цьому Compose він включається
    до Npgsql connection string, тому використовуйте hex/base64url без `;`.
+   Username бота не задається: backend отримує його через Telegram `getMe`
+   за `TELEGRAM_BOT_TOKEN` під час першого запиту `/api/config` і кешує до
+   перезапуску. Після зміни username у BotFather перезапустіть backend.
+   Якщо Telegram недоступний або token невалідний, цей endpoint повертає
+   503; запуск сервісів і міграції не потребують виклику `getMe`.
+   ID AI-моделей уже задані в
+   [appsettings.json](../src/backend/ExpenseTracker.Api/appsettings.json):
+   `openai/gpt-6-luna` для тексту, `google/gemini-3.1-flash-lite` для STT.
+   У Coolify задайте лише `OPENROUTER_API_KEY`; старі model env-змінні
+   видаліть, включно з прямими `OpenRouter__TextModel`/`OpenRouter__AudioModel`,
+   щоб вони не перевизначали серверний конфіг.
 2. Призначте домен **тільки gateway**, порт `8080`, HTTPS через Coolify proxy.
    Не призначайте domains backend/bot/frontend/postgres і не відкривайте їх
    порти на хості. Caddy маршрутизує `/api/*` і `/telegram/webhook`, повертає
@@ -65,8 +76,11 @@ callback_query, задає menu Web App та зберігає pending updates. �
 
 ## Експлуатація та rollback
 
-AI: 2000 символів тексту, до 10 МБ / 120 секунд аудіо, до 10 запитів/хвилину
-на користувача, timeout 75 с, 1000 output tokens. Вимкніть logging payloads.
+AI: 2000 символів тексту/транскрипту, до 10 МБ / 120 секунд аудіо,
+до 10 запитів/хвилину на користувача, загальний timeout AI-обробки 75 с,
+до 1000 output tokens на provider-запит. Голос використовує два послідовні
+запити: STT → текстовий розбір. Luna працює без reasoning і без несумісного
+`temperature`; Flash-Lite — із minimal reasoning. Вимкніть logging payloads.
 Ліміт витрат ключа задається також у OpenRouter; це межа загального бюджету.
 Каталог першої версії — до 50 рахунків і 50 категорій на користувача з архівом.
 Криптографічний proof: `Telegram__ProofMaxAgeSeconds=300` (60..600),

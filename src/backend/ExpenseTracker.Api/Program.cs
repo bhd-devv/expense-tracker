@@ -38,6 +38,13 @@ builder.Services.AddOptions<TelegramValidationOptions>().Bind(configuration.GetS
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<ExpenseService>();
+builder.Services.AddSingleton<TelegramBotIdentity>();
+builder.Services.AddHttpClient("TelegramIdentity", client =>
+{
+    client.BaseAddress = new Uri("https://api.telegram.org/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.MaxResponseContentBufferSize = 64 * 1024;
+}).RemoveAllLoggers(); // Telegram API URLs contain the bot token.
 builder.Services.AddHostedService<Maintenance>();
 builder.Services.AddHttpClient<OpenRouter>(client =>
 {

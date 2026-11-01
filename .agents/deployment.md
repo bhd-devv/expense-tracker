@@ -33,6 +33,13 @@ Next.js catch-all. Зовнішній TLS завершує Coolify proxy. Не �
 `/internal/bot/*` або весь bot port. Webhook маршрут має вищий пріоритет
 за frontend catch-all; приватні API paths блокуються на proxy.
 
+Gateway звертається до backend через alias `expense-tracker-api-private`,
+заданий лише на Compose network `private`. Coolify може під'єднати обидва
+контейнери також до application network: звичайне ім'я `backend` тоді
+не гарантує private маршрут. HTTPS forwarded headers backend приймає від
+статичного private IP gateway `172.30.19.2`; цей периметр не розширюй на
+всю додаткову мережу. Зміна alias вимагає застосування Compose й rebuild gateway.
+
 ## Конфігурація
 
 Додай `.env.example` лише з безпечними placeholders та описом обов'язкових

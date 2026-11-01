@@ -75,6 +75,12 @@ services:
         condition: service_healthy
   backend:
     <<: *backend
+    # Coolify also attaches services to its application network. Keep the
+    # gateway's API upstream on this network, where its trusted IP is fixed.
+    networks:
+      private:
+        aliases:
+          - expense-tracker-api-private
     restart: unless-stopped
     depends_on:
       migrate:

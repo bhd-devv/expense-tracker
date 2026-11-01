@@ -106,7 +106,10 @@
   правила маршрутизації версіонуються в репозиторії й копіюються в gateway
   image через `deploy/gateway.Dockerfile`. Host bind mount Caddyfile не
   використовується: Coolify helper checkout і filesystem Docker host
-  можуть відрізнятися. Зміна routing потребує перебудови gateway. HTTPS і Telegram
+  можуть відрізнятися. API upstream використовує alias
+  `expense-tracker-api-private` лише в private network, щоб додаткова мережа
+  Coolify не змінила source IP gateway і перевірку trusted proxy.
+  Зміна routing потребує перебудови gateway. HTTPS і Telegram
   клієнти потребують перевірки після справжнього deployment.
 - **Контракт запуску:** [deployment](../../docs/deployment.md).
 

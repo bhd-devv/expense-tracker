@@ -118,7 +118,10 @@ Antiforgery. Одного власного `user_id` недостатньо дл
   лише серверу. Заборонено `NEXT_PUBLIC_*` для секретів.
 - Не логуй `initData`, cookie, auth headers, tokens або довільні Telegram
   payloads. Фінансові нотатки й суми не додавай у технічні logs за замовчуванням.
-- Довіряй forwarded headers лише від налаштованого proxy/network Coolify.
+- Довіряй forwarded headers лише від налаштованого private IP gateway
+  (`172.30.19.2` у Compose). Gateway звертається до API через network-specific
+  alias `expense-tracker-api-private`; додаткова application network Coolify
+  не є довіреним proxy-периметром.
   HTTPS termination не повинна вимикати `Secure` cookie або створювати open redirects.
 
 Початковий сценарій входу — запуск усередині Telegram. Поза Telegram показуй

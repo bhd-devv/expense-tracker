@@ -14,6 +14,13 @@
 
 ## Межі впевненості
 
+Наданий Docker inspect підтвердив дві спільні мережі gateway/backend;
+production logs показали HTTP у `Antiforgery.CheckSSLConfig`.
+[Приватний API alias виправлено локально](changelog/018-gateway-private-api-routing.md).
+Наступна зовнішня дія — redeploy оновленого Compose й gateway image,
+потім перевірка private DNS, 200 `/api/auth/csrf` та входу з Telegram.
+Після правки цей сценарій у Coolify ще не перевірено.
+
 Живі OpenRouter/Telegram, HTTPS у Telegram-клієнтах і Coolify ще не перевірені.
 Логування та щоденні архіви [реалізовано локально](../docs/logging.md);
 image build, Caddy runtime і права log volumes не перевірені, оскільки

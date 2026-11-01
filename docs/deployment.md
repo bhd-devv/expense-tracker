@@ -46,6 +46,11 @@ Coolify створив помилковий каталог `deploy/Caddyfile`, �
    Автоматичні адреси виділяються з `172.30.19.128/25`, окремо від gateway.
    За конфлікту змініть subnet, `ipv4_address` і `App__KnownProxies__0`
    узгоджено. Backend довіряє forwarded headers лише цій адресі.
+   Caddy звертається до API через `expense-tracker-api-private:8080` — alias
+   backend, заданий **лише** в мережі `private`. Не замінюйте його на
+   `backend:8080`: Coolify додає також application network, де ім'я
+   `backend` може резолвитися в іншу адресу. Тоді gateway з'єднується з API
+   зі своєї іншої, недовіреної адреси, і backend ігнорує HTTPS-заголовок.
    Довірчий периметр — Coolify proxy + gateway; gateway не має бути
    доступним напряму з інтернету. TLS завершується перед gateway.
 4. Налаштуйте backup PostgreSQL поза хостом і захищений persistent volume
@@ -95,6 +100,9 @@ menu button **Lime** біля поля введення. Reply `web_app` зап�
 ## Smoke після release
 
 - `/api/health/ready` → 200; `/internal/bot/actor/profile` через public origin → 404.
+- `GET /api/auth/csrf` через public HTTPS origin → 200, CSRF cookie має
+  `Secure`. `500` із `DefaultAntiforgery.CheckSSLConfig` означає, що API
+  бачить HTTP: перевірте private alias та адресу gateway у trusted proxies.
 - `/telegram/webhook` без secret → 403; непідтримувані updates не розкривають даних.
 - Mini App: Telegram login, Secure/HttpOnly cookie, CSRF, повторне відкриття,
   logout і відмова доступу після нього. Перевірте реальні Telegram клієнти.
@@ -102,6 +110,26 @@ menu button **Lime** біля поля введення. Reply `web_app` зап�
   повторне натискання не додає запис. Та сама витрата видима в іншому каналі.
 - Старі callbacks і паралельне редагування повертають conflict; чернетки
   живуть 30 хвилин. Обидві мови й теми, уже відкритий Mini App після оновлення.
+
+### Якщо CSRF падає через HTTPS після Coolify proxy
+
+Перевірте мережі актуальних gateway/backend контейнерів, не виводячи env:
+
+```bash
+sudo docker ps --format '{{.Names}}'
+sudo docker inspect --format '{{.Name}} {{json .NetworkSettings.Networks}}' GATEWAY_CONTAINER BACKEND_CONTAINER
+sudo docker exec GATEWAY_CONTAINER nslookup expense-tracker-api-private
+```
+
+У private network gateway повинен мати `172.30.19.2`, backend — alias
+`expense-tracker-api-private`; DNS-відповідь із gateway повинна містити
+тільки private IP backend. Додаткова application network від Coolify допустима;
+її адреси не треба додавати до `App__KnownProxies__0`.
+Для цієї правки потрібні оновлена Compose-конфігурація backend із alias та
+перебудований gateway image з новим Caddyfile. Простого restart недостатньо.
+Після redeploy відкрийте Mini App знову та перевірте CSRF → Telegram login.
+Не вимикайте Secure cookies або CSRF і не дозволяйте forwarded headers
+від усіх адрес для обходу цієї помилки.
 
 ## Експлуатація та rollback
 

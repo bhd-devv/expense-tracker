@@ -36,7 +36,8 @@
         respond 404
     }
     handle /api/* {
-        reverse_proxy backend:8080 {
+        # This alias exists only on private; backend also resolves on Coolify's network.
+        reverse_proxy expense-tracker-api-private:8080 {
             # Secure cookies and origin validation use fixed production config.
             header_up X-Forwarded-Proto https
         }

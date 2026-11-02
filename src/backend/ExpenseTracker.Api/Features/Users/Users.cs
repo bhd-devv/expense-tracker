@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 namespace ExpenseTracker.Api.Features.Users;
 
 public sealed record ProfileDto(Guid Id, string Language, string Theme, string TimeZone, string Currency,
-    bool AiConsent, int Version, DateOnly Today);
+    bool AiConsent, int Version, DateOnly Today, string InputMode = "ai");
 public sealed record PreferencesRequest(string Language, string Theme, string TimeZone, string Currency,
-    bool AiConsent, int Version);
+    bool AiConsent, int Version, string? InputMode = null);
 
 public sealed class UserService(Database db, ILogger<UserService>? logger = null)
 {
@@ -42,19 +42,21 @@ public sealed class UserService(Database db, ILogger<UserService>? logger = null
     }
 
     public static ProfileDto View(User user) => new(user.Id, user.Language, user.Theme, user.TimeZone,
-        user.Currency, user.AiConsent, user.Version, Rules.Today(user, TimeProvider.System));
+        user.Currency, user.AiConsent, user.Version, Rules.Today(user, TimeProvider.System), user.InputMode);
 
     public async Task<ProfileDto> Update(User user, PreferencesRequest input, CancellationToken ct)
     {
         if (input.Version != user.Version) throw new ApiError("conflict", 409);
         if (input.Language is not ("uk" or "en") || input.Theme is not ("auto" or "light" or "dark")
-            || !Rules.Currencies.Contains(input.Currency)) throw new ApiError("invalid_preferences");
+            || !Rules.Currencies.Contains(input.Currency)
+            || input.InputMode is not (null or "manual" or "ai")) throw new ApiError("invalid_preferences");
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(input.TimeZone, out _)) throw new ApiError("invalid_timezone");
         user.Language = input.Language;
         user.Theme = input.Theme;
         user.TimeZone = input.TimeZone;
         user.Currency = input.Currency;
         user.AiConsent = input.AiConsent;
+        user.InputMode = input.InputMode ?? user.InputMode;
         user.Version++;
         await db.SaveChangesAsync(ct);
         logger?.LogInformation("Preferences saved userId={UserId} version={Version}", user.Id, user.Version);

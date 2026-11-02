@@ -3,6 +3,8 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 021 — [Ручне й AI-введення витрат та явна дата](../.agents/changelog/021-manual-ai-expense-entry.md)
+- 020 — [Категорії та налаштування в нижній навігації](../.agents/changelog/020-bottom-navigation-direct-sections.md)
 - 019 — [Витрати без фінансових рахунків](../.agents/changelog/019-expenses-without-accounts.md)
 - 018 — [Приватний маршрут gateway до API для HTTPS та CSRF](../.agents/changelog/018-gateway-private-api-routing.md)
 - 017 — [Вхід Mini App через inline-кнопку замість reply web_app](../.agents/changelog/017-telegram-inline-launch.md)

@@ -11,6 +11,7 @@ public sealed class User
     public string TimeZone { get; set; } = "Europe/Kyiv";
     public string Currency { get; set; } = "UAH";
     public bool AiConsent { get; set; }
+    public string InputMode { get; set; } = "ai";
     public int Version { get; set; } = 1;
 }
 
@@ -131,6 +132,7 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
     {
         model.Entity<User>().HasIndex(x => x.TelegramId).IsUnique();
         model.Entity<User>().Property(x => x.Version).IsConcurrencyToken();
+        model.Entity<User>().Property(x => x.InputMode).HasDefaultValue("ai");
         model.Entity<Category>().HasAlternateKey(x => new { x.UserId, x.Id });
         model.Entity<Category>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
         model.Entity<Category>().Property(x => x.Version).IsConcurrencyToken();

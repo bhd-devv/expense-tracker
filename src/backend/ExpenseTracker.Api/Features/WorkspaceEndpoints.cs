@@ -35,7 +35,7 @@ public static class WorkspaceEndpoints
             HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.Report(await users.Current(context, ct), from, to, categoryId, ct));
         group.MapPost("/drafts", async (CreateDraftRequest input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, source, null, ct)).RequireRateLimiting("ai");
+            await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, source, null, ct, input.Mode)).RequireRateLimiting("ai");
         group.MapPost("/drafts/audio", async (HttpRequest request, HttpContext context, UserService users, ExpenseService expenses, ILogger<OpenRouter> logger, CancellationToken ct) =>
         {
             var user = await users.Current(context, ct);

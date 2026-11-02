@@ -11,6 +11,7 @@ export const profileSchema: z.ZodType<components["schemas"]["ProfileDto"]> =
     timeZone: z.string(),
     currency: z.string(),
     aiConsent: z.boolean(),
+    inputMode: z.enum(["manual", "ai"]).default("ai"),
     version: z.number().int(),
     today: z.string(),
   });

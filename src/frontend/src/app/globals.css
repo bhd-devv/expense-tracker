@@ -292,6 +292,14 @@ svg {
   color: var(--muted);
   opacity: 1;
 }
+.manual-entry {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.manual-entry .button {
+  white-space: normal;
+}
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
@@ -607,7 +615,19 @@ summary::-webkit-details-marker {
   padding-top: 24px;
   margin-top: 28px;
 }
-.consent label {
+.input-mode {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  margin: 28px 0 0;
+}
+.input-mode legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.consent label,
+.input-mode label {
   flex-direction: row;
   align-items: center;
   min-height: 44px;
@@ -621,7 +641,8 @@ input[type="checkbox"] {
   flex-shrink: 0;
   margin: 0 4px 0 0;
 }
-.consent p {
+.consent p,
+.input-mode p {
   font-size: 0.9375rem;
   margin-top: 8px;
 }
@@ -763,59 +784,22 @@ summary {
   background: var(--accent-active);
 }
 .secondary:hover:not(:disabled),
-.sidebar nav button:hover,
-.mobile-menu button:hover {
+.sidebar nav button:hover {
   background: var(--surface-hover);
 }
 .secondary:active:not(:disabled),
 .icon-button:active:not(:disabled),
 .quiet:active:not(:disabled),
-.sidebar nav button:active,
-.mobile-menu button:active {
+.sidebar nav button:active {
   background: var(--surface-active);
 }
-.sidebar nav button.selected,
-.mobile-menu button.selected {
+.sidebar nav button.selected {
   color: var(--text);
   background: var(--accent-soft);
   font-weight: 600;
 }
-.sidebar nav button[data-secondary="true"] {
+.sidebar nav button[data-desktop-only="true"] {
   display: none;
-}
-.mobile-menu {
-  position: fixed;
-  inset: auto max(16px, env(safe-area-inset-right, 0px))
-    calc(6rem + env(safe-area-inset-bottom, 0px)) auto;
-  width: min(288px, calc(100% - 32px));
-  max-height: calc(100dvh - 7rem - env(safe-area-inset-bottom, 0px));
-  overflow: auto;
-  margin: 0;
-  padding: 8px;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--control-border);
-  border-radius: 16px;
-}
-.mobile-menu button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 56px;
-  padding: 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  text-align: left;
-}
-.mobile-menu button svg:last-child {
-  margin-left: auto;
-  color: var(--muted);
-}
-.mobile-menu button span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 .money {
   font-variant-numeric: tabular-nums lining-nums;
@@ -954,12 +938,8 @@ summary {
     align-items: start;
   }
 
-  .sidebar nav button[data-secondary="true"] {
+  .sidebar nav button[data-desktop-only="true"] {
     display: flex;
-  }
-  .sidebar nav .mobile-more,
-  .mobile-menu {
-    display: none;
   }
   .expense-amount .money-currency {
     display: inline;

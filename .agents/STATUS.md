@@ -6,6 +6,10 @@
 
 ## Активна робота
 
+Локальні зміни [ручного/AI-введення](tasks/manual-ai-input-2026-11-02/README.md)
+завершені. Підготовлено additive migration `AddInputMode`; build, тести,
+browser та реальні Telegram/OpenRouter перевірки очікують окремого запиту.
+
 Локальні зміни [витрат без фінансових рахунків](tasks/expenses-without-accounts-2026-11-02/README.md)
 завершені. Runtime перевірки очікують окремого запиту користувача;
 перед release потрібні PostgreSQL migration test і узгоджене оновлення сервісів.

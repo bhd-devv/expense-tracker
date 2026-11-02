@@ -12,7 +12,7 @@ public sealed record ExpenseDto(Guid Id, string Amount, string Currency, string 
 public sealed record ExpensePage(IReadOnlyList<ExpenseDto> Items, int Page, bool HasMore);
 public sealed record DraftDto(Guid Id, string Status, string? Amount, string Currency, string Description, string Transcript,
     DateOnly Date, Guid? CategoryId, string? ErrorCode, int Version, Guid? ExpenseId);
-public sealed record CreateDraftRequest(Guid RequestId, string Text);
+public sealed record CreateDraftRequest(Guid RequestId, string Text, string? Mode = null);
 public sealed record ReportRow(string Currency, Guid CategoryId, string Amount, int Count);
 public sealed record ReportTotal(string Currency, string Amount, int Count);
 public sealed record ReportDto(IReadOnlyList<ReportTotal> Totals, IReadOnlyList<ReportRow> Categories);
@@ -56,12 +56,15 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
     public async Task<Draft> FindDraft(User user, Guid id, CancellationToken ct) =>
         await db.Drafts.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == id, ct) ?? throw new ApiError("not_found", 404);
 
-    public async Task<DraftDto> Create(User user, Guid requestId, string text, string source, byte[]? audio, CancellationToken ct)
+    public async Task<DraftDto> Create(User user, Guid requestId, string text, string source, byte[]? audio, CancellationToken ct, string? mode = null)
     {
         if (requestId == Guid.Empty) throw new ApiError("invalid_request_id");
-        if (audio is null) text = Rules.Text(text, 2000);
+        mode ??= user.InputMode;
+        if (mode is not ("ai" or "manual") || (mode == "manual" && audio is not null)) throw new ApiError("invalid_input_mode");
+        var manual = mode == "manual";
+        if (audio is null) text = manual && string.IsNullOrWhiteSpace(text) ? "" : Rules.Text(text, manual ? 500 : 2000);
         var fingerprint = Convert.ToHexStringLower(SHA256.HashData(audio ?? Encoding.UTF8.GetBytes(text)));
-        var inputHash = fingerprint;
+        var inputHash = manual ? $"manual:{fingerprint}" : fingerprint;
         Draft draft;
         await using (var transaction = await db.Database.BeginTransactionAsync(ct))
         {
@@ -80,9 +83,11 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
                 InputHash = inputHash,
                 Currency = user.Currency,
                 Date = Rules.Today(user, clock),
-                Transcript = text,
+                Transcript = manual ? "" : text,
                 Source = source,
-                InputKind = audio is null ? "text" : "voice",
+                InputKind = manual ? "manual" : audio is null ? "text" : "voice",
+                Status = manual ? "ready" : "processing",
+                Description = manual ? text : "",
                 ExpiresAt = clock.GetUtcNow().AddMinutes(30)
             };
             db.Drafts.Add(draft);
@@ -91,12 +96,13 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         }
         logger?.LogInformation("Draft created draftId={DraftId} userId={UserId} source={Source} inputKind={InputKind}",
             draft.Id, user.Id, source, draft.InputKind);
+        if (manual) return ViewDraft(draft);
         try
         {
             if (!user.AiConsent) throw new ApiError("ai_consent_required");
             var categories = await db.Categories.Where(x => x.UserId == user.Id && !x.Archived).ToArrayAsync(ct);
             var currency = draft.Currency;
-            var result = await ai.Parse(text, audio, categories, currency, ct);
+            var result = await ai.Parse(text, audio, categories, currency, draft.Date, ct);
             currency = result.Currency ?? currency;
             if (!Rules.Currencies.Contains(currency)) throw new ApiError("invalid_currency");
             draft.Currency = currency;
@@ -104,8 +110,18 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             draft.Description = string.IsNullOrWhiteSpace(result.Description) ? draft.Transcript : Rules.Text(result.Description);
             draft.Amount = result.Amount is null ? null : Rules.Amount(result.Amount, currency);
             draft.CategoryId = Guid.TryParse(result.CategoryId, out var category) && categories.Any(x => x.Id == category) ? category : null;
+            var unclearDate = result.DateNeedsClarification;
+            if (result.Date is not null)
+            {
+                if (!DateOnly.TryParseExact(result.Date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var date) || date == default) unclearDate = true;
+                else draft.Date = date;
+            }
+            // An unresolved explicit date must not silently fall back to today at confirmation.
+            if (unclearDate) draft.Date = default;
             draft.Status = "ready";
-            draft.ErrorCode = draft.Amount is null || draft.CategoryId is null ? "needs_clarification" : null;
+            draft.ErrorCode = unclearDate ? "date_needs_clarification"
+                : draft.Amount is null || draft.CategoryId is null ? "needs_clarification" : null;
         }
         catch (Exception error) when (error is ApiError or HttpRequestException or JsonException or TaskCanceledException)
         {
@@ -216,6 +232,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         if (input.Date == default) throw new ApiError("invalid_date");
         draft.Date = input.Date;
         draft.CategoryId = input.CategoryId;
+        if (draft.ErrorCode == "date_needs_clarification") draft.ErrorCode = null;
         draft.Version++;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);

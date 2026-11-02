@@ -13,9 +13,22 @@ COPY = {
             "A little clarity. Every day.\nSend a description or a voice note to add an expense."
         ),
         "prompt": (
-            "Send an expense as text or a voice note. We will set today’s date and "
-            "suggest a category."
+            "Send an expense as text or a voice note. AI will suggest its details. "
+            "The date defaults to today; you can specify another date in your description."
         ),
+        "welcomeManual": "Choose Add expense to fill in the fields manually.",
+        "manualPrompt": (
+            "Fill in the fields using the buttons. Currency and today’s date are prefilled "
+            "and can be changed."
+        ),
+        "manualVoice": (
+            "Voice entry is available in AI mode. Choose it in Settings, or use Add expense "
+            "to fill in the fields manually."
+        ),
+        "inputMode": "Expense entry",
+        "manualMode": "Manual",
+        "aiMode": "AI · text or voice",
+        "clarifyDate": "The date in your description was unclear. Choose Date before saving.",
         "save": "Save",
         "edit": "Edit",
         "cancel": "Cancel",
@@ -27,7 +40,7 @@ COPY = {
         "deleted": "Expense deleted",
         "draft": "Check your expense",
         "processing": "Understanding your expense…",
-        "manual": "AI could not complete this draft. Use the buttons to fill it in manually.",
+        "manual": "Check the fields and fill in any missing values using the buttons.",
         "input": "Send the new value",
         "error": "Please check the value and try again.",
         "stale": "This action expired or the record changed. Reopen it from the menu.",
@@ -63,8 +76,8 @@ COPY = {
         "previous": "Previous",
         "next": "Next",
         "consentNeeded": (
-            "Enable AI processing in Settings before sending voice notes. Text drafts "
-            "can be completed manually."
+            "Enable AI processing in Settings to use text or voice AI entry. "
+            "You can also choose Manual entry there."
         ),
         "limit": "Voice note must be at most 2 minutes and 10 MB.",
         "food": "Food & drinks",
@@ -99,9 +112,21 @@ COPY = {
         "openAppPrompt": "Відкрийте застосунок кнопкою нижче для безпечного входу.",
         "welcome": "Трохи ясності. Щодня.\nНадішліть опис або голосове, щоб додати витрату.",
         "prompt": (
-            "Надішліть витрату текстом або голосом. Підставимо сьогоднішню дату й "
-            "запропонуємо категорію."
+            "Надішліть витрату текстом або голосом — AI розбере її на поля. "
+            "Дата за замовчуванням — сьогодні; іншу можна вказати в описі."
         ),
+        "welcomeManual": "Виберіть «Додати витрату», щоб заповнити поля вручну.",
+        "manualPrompt": (
+            "Заповніть поля кнопками. Валюту та сьогоднішню дату вже підставлено, їх можна змінити."
+        ),
+        "manualVoice": (
+            "Голосове введення доступне в режимі AI в налаштуваннях. Або виберіть «Додати витрату», "
+            "щоб заповнити поля вручну."
+        ),
+        "inputMode": "Введення витрат",
+        "manualMode": "Вручну",
+        "aiMode": "AI · текст або голос",
+        "clarifyDate": "Дата в описі неоднозначна. Виберіть «Дата» перед збереженням.",
         "save": "Зберегти",
         "edit": "Змінити",
         "cancel": "Скасувати",
@@ -113,7 +138,7 @@ COPY = {
         "deleted": "Витрату видалено",
         "draft": "Перевірте витрату",
         "processing": "Розбираємо витрату…",
-        "manual": "AI не зміг заповнити чернетку. Внесіть значення вручну кнопками.",
+        "manual": "Перевірте поля та заповніть відсутні значення кнопками.",
         "input": "Надішліть нове значення",
         "error": "Перевірте значення та спробуйте ще раз.",
         "stale": "Дія застаріла або запис змінився. Відкрийте його з меню знову.",
@@ -149,8 +174,8 @@ COPY = {
         "previous": "Назад",
         "next": "Далі",
         "consentNeeded": (
-            "Увімкніть AI-обробку в налаштуваннях для голосових. Текстову чернетку можна"
-            " заповнити вручну."
+            "Увімкніть AI-обробку в налаштуваннях для введення текстом або голосом. "
+            "Або виберіть там ручне введення."
         ),
         "limit": "Голосове має бути до 2 хвилин і 10 МБ.",
         "food": "Їжа та напої",

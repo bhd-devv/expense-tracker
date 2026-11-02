@@ -1,3 +1,4 @@
+import json
 import os
 import random
 from collections.abc import AsyncGenerator
@@ -17,6 +18,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     Update,
     User,
+    Voice,
 )
 
 from expense_tracker_bot.api import Api
@@ -428,4 +430,170 @@ async def test_currency_button_updates_record_without_a_financial_account(
     response = session.sent[-1]
     assert isinstance(response, SendMessage)
     assert "12.5 USD" in response.text
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+@pytest.mark.parametrize("entry", ["menu", "text", "voice"])
+async def test_manual_entry_uses_fields_without_ai_or_audio_download(
+    language: str, entry: str
+) -> None:
+    draft_id = "00000000-0000-0000-0000-000000000043"
+    draft = {
+        "id": draft_id,
+        "status": "ready",
+        "amount": None,
+        "currency": "UAH",
+        "description": "Coffee" if entry == "text" else "",
+        "transcript": "",
+        "date": "2026-11-02",
+        "categoryId": None,
+        "errorCode": None,
+        "version": 1,
+        "expenseId": None,
+    }
+    calls: list[httpx.Request] = []
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        path = request.url.path.rsplit("/", 1)[-1]
+        if path == "profile":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "aiConsent": False,
+                    "inputMode": "manual",
+                    "version": 1,
+                    "today": "2026-11-02",
+                },
+            )
+        if path == "conversation":
+            return httpx.Response(
+                200,
+                json={
+                    "state": "idle",
+                    "entityId": None,
+                    "field": None,
+                    "version": 1,
+                },
+            )
+        if path == "drafts":
+            assert request.method == "POST"
+            payload = json.loads(request.content)
+            assert payload["mode"] == "manual"
+            assert payload["text"] == ("Coffee" if entry == "text" else "")
+            return httpx.Response(200, json=draft)
+        if path == draft_id:
+            return httpx.Response(200, json=draft)
+        if path == "catalog":
+            return httpx.Response(200, json={"categories": []})
+        raise AssertionError(f"Unexpected API request: {request.method} {request.url.path}")
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    message = Message(
+        message_id=1,
+        date=datetime.now(UTC),
+        chat=Chat(id=42, type="private"),
+        from_user=User(id=42, is_bot=False, first_name="Synthetic", language_code=language),
+        text=COPY[language]["add"] if entry == "menu" else "Coffee" if entry == "text" else None,
+        voice=Voice(file_id="synthetic", file_unique_id="synthetic", duration=1)
+        if entry == "voice"
+        else None,
+    ).as_(bot)
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        await handle_message(
+            message, client, "https://example.com", Update(update_id=12, message=message), bot
+        )
+    if entry == "voice":
+        assert all(request.method == "GET" for request in calls)
+        assert session.sent[-1].text == COPY[language]["manualVoice"]
+    else:
+        result = session.sent[-1]
+        assert isinstance(result, SendMessage)
+        assert isinstance(result.reply_markup, InlineKeyboardMarkup)
+        actions = [
+            Action.unpack(button.callback_data)
+            for row in result.reply_markup.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        assert {action.field for action in actions if action.action == "field"} == {
+            "d.amount",
+            "d.currency",
+            "d.description",
+            "d.date",
+            "d.categoryId",
+        }
+        assert "2026-11-02" in result.text
+        assert COPY[language]["manual"] not in result.text
+        assert sum(request.method == "POST" for request in calls) == 1
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+async def test_entry_mode_switch_preserves_ai_consent(language: str) -> None:
+    profile = {
+        "id": "00000000-0000-0000-0000-000000000042",
+        "language": language,
+        "theme": "auto",
+        "timeZone": "Europe/Kyiv",
+        "currency": "UAH",
+        "aiConsent": False,
+        "inputMode": "ai",
+        "version": 1,
+        "today": "2026-11-02",
+    }
+    conversation = {"state": "preference", "entityId": None, "field": "inputMode.1", "version": 3}
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/profile"):
+            if request.method == "PUT":
+                payload = json.loads(request.content)
+                assert payload["inputMode"] == "manual"
+                assert payload["aiConsent"] is False
+                profile.update(payload)
+                profile["version"] = 2
+            return httpx.Response(200, json=profile)
+        assert request.url.path.endswith("/conversation")
+        if request.method == "PUT":
+            conversation.update(json.loads(request.content))
+            conversation["version"] = 4
+        return httpx.Response(200, json=conversation)
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    user = User(id=42, is_bot=False, first_name="Synthetic", language_code=language)
+    message = Message(message_id=1, date=datetime.now(UTC), chat=Chat(id=42, type="private")).as_(
+        bot
+    )
+    action = Action(action="preference", entity="manual", field="inputMode", version=3)
+    callback = CallbackQuery(
+        id="synthetic-mode",
+        from_user=user,
+        chat_instance="test",
+        message=message,
+        data=action.pack(),
+    ).as_(bot)
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        await handle_callback(callback, action, client, "https://example.com")
+    assert profile["inputMode"] == "manual"
+    assert profile["aiConsent"] is False
+    settings_message = session.sent[-1]
+    assert isinstance(settings_message, SendMessage)
+    assert isinstance(settings_message.reply_markup, InlineKeyboardMarkup)
+    assert any(
+        COPY[language]["manualMode"] in button.text
+        for row in settings_message.reply_markup.inline_keyboard
+        for button in row
+    )
     await bot.session.close()

@@ -1478,6 +1478,13 @@
           },
           "text": {
             "type": "string"
+          },
+          "mode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
           }
         }
       },
@@ -1799,6 +1806,13 @@
           "version": {
             "type": "integer",
             "format": "int32"
+          },
+          "inputMode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
           }
         }
       },
@@ -1841,6 +1855,10 @@
           "today": {
             "type": "string",
             "format": "date"
+          },
+          "inputMode": {
+            "type": "string",
+            "default": "ai"
           }
         }
       },

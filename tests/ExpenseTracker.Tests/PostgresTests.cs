@@ -86,6 +86,54 @@ public sealed class PostgresTests
     }
 
     [PostgresFact]
+    public async Task ManualEntrySharesPreferenceAcrossChannelsAndSkipsAiWithoutConsent()
+    {
+        var calls = 0;
+        await using var factory = await Factory(services =>
+            services.AddHttpClient<OpenRouter>().ConfigurePrimaryHttpMessageHandler(() => new AiHandler(_ =>
+            {
+                calls++;
+                throw new InvalidOperationException("Manual entry must not call AI");
+            })));
+        var telegramId = Random.Shared.NextInt64(1_000_000, 9_000_000_000);
+        using var browser = await Browser(factory, telegramId);
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        var preferences = new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, profile.Currency,
+            false, profile.Version, "manual");
+        (await browser.PutAsJsonAsync("/api/profile", preferences)).EnsureSuccessStatusCode();
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        var shared = await bot.GetFromJsonAsync<ProfileDto>("/internal/bot/actor/profile") ?? throw new InvalidOperationException();
+        Assert.Equal("manual", shared.InputMode);
+        Assert.False(shared.AiConsent);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PutAsJsonAsync("/api/profile",
+            preferences with { Version = shared.Version, InputMode = "invalid" })).StatusCode);
+        var input = new CreateDraftRequest(Guid.NewGuid(), "");
+        var response = await bot.PostAsJsonAsync("/internal/bot/actor/drafts", input);
+        response.EnsureSuccessStatusCode();
+        var draft = await response.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("ready", draft.Status);
+        Assert.Null(draft.ErrorCode);
+        Assert.Equal(shared.Today, draft.Date);
+        Assert.Equal(shared.Currency, draft.Currency);
+        Assert.Equal(draft, await (await bot.PostAsJsonAsync("/internal/bot/actor/drafts", input)).Content.ReadFromJsonAsync<DraftDto>());
+        Assert.Equal(HttpStatusCode.Conflict, (await bot.PostAsJsonAsync("/internal/bot/actor/drafts", input with { Mode = "ai", Text = "Coffee 85" })).StatusCode);
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var confirmation = new ExpenseInput("12.50", "EUR", catalog.Categories[0].Id, "Manual coffee", draft.Date.AddDays(-1), draft.Version);
+        var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation);
+        saved.EnsureSuccessStatusCode();
+        Assert.Equal(confirmation.Date, (await saved.Content.ReadFromJsonAsync<ExpenseDto>())?.Date);
+        (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation)).EnsureSuccessStatusCode();
+        var sharedExpenses = await bot.GetFromJsonAsync<ExpensePage>("/internal/bot/actor/expenses") ?? throw new InvalidOperationException();
+        Assert.Single(sharedExpenses.Items);
+        // Older clients can update preferences without resetting the newly selected mode.
+        (await browser.PutAsJsonAsync("/api/profile", preferences with { Version = shared.Version, InputMode = null })).EnsureSuccessStatusCode();
+        Assert.Equal("manual", (await browser.GetFromJsonAsync<ProfileDto>("/api/profile"))?.InputMode);
+        Assert.Equal(0, calls);
+    }
+
+    [PostgresFact]
     public async Task ExpenseAndDraftCurrenciesSurvivePreferenceChanges()
     {
         await using var factory = await Factory();
@@ -309,7 +357,7 @@ public sealed class PostgresTests
             {
                 calls++;
                 clock.Now = clock.Now.AddSeconds(2);
-                var content = System.Text.Json.JsonSerializer.Serialize(new { amount = "85.20", currency = "EUR", categoryId = category.ToString(), description = "Кава", transcript = "Кава 85 євро 20 центів" });
+                var content = System.Text.Json.JsonSerializer.Serialize(new { amount = "85.20", currency = "EUR", categoryId = category.ToString(), description = "Кава", transcript = "Кава 85 євро 20 центів", date = (string?)null, dateNeedsClarification = false });
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) });
             }));
         });
@@ -335,6 +383,69 @@ public sealed class PostgresTests
         Assert.Equal(1, calls);
         var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", new ExpenseInput("85.2", "EUR", category, draft.Description, draft.Date, draft.Version));
         saved.EnsureSuccessStatusCode();
+    }
+
+    [PostgresFact]
+    public async Task AiDatesAreValidatedAndAmbiguousDatesRequireExplicitSelection()
+    {
+        string? proposedDate = null;
+        var unclear = false;
+        var category = Guid.Empty;
+        var clock = new Clock();
+        await using var factory = await Factory(services =>
+        {
+            services.AddSingleton<TimeProvider>(clock);
+            services.AddHttpClient<OpenRouter>().ConfigurePrimaryHttpMessageHandler(() => new AiHandler(async request =>
+            {
+                using var body = System.Text.Json.JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+                Assert.Contains("2026-11-01", body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
+                clock.Now = clock.Now.AddSeconds(2);
+                var content = System.Text.Json.JsonSerializer.Serialize(new { amount = "85", currency = "UAH",
+                    categoryId = category.ToString(), description = "Кава", transcript = "Кава", date = proposedDate,
+                    dateNeedsClarification = unclear });
+                return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) };
+            }));
+        });
+        var config = factory.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        config["OpenRouter:ApiKey"] = "synthetic-key";
+        config["OpenRouter:TextModel"] = "synthetic-model";
+        using var browser = await Browser(factory, Random.Shared.NextInt64(1_000_000, 9_000_000_000), clock.Now);
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme,
+            profile.TimeZone, profile.Currency, true, profile.Version))).EnsureSuccessStatusCode();
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        category = catalog.Categories[0].Id;
+        foreach (var sample in new (string? Date, bool Unclear, DateOnly Expected)[]
+        {
+            (null, false, new(2026, 11, 1)),
+            ("2026-10-31", false, new(2026, 10, 31)),
+            ("2026-02-30", false, default),
+            (null, true, default),
+            ("0001-01-01", false, default)
+        })
+        {
+            clock.Now = new(2026, 11, 1, 21, 59, 59, TimeSpan.Zero);
+            proposedDate = sample.Date;
+            unclear = sample.Unclear;
+            var input = new CreateDraftRequest(Guid.NewGuid(), "Кава 85 грн");
+            var response = await browser.PostAsJsonAsync("/api/drafts", input);
+            response.EnsureSuccessStatusCode();
+            var draft = await response.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+            Assert.Equal(sample.Expected, draft.Date);
+            Assert.Equal(draft, await (await browser.PostAsJsonAsync("/api/drafts", input)).Content.ReadFromJsonAsync<DraftDto>());
+            if (sample.Expected == default)
+            {
+                Assert.Equal("date_needs_clarification", draft.ErrorCode);
+                var confirmation = new ExpenseInput("85", "UAH", category, "Кава", draft.Date, draft.Version);
+                Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation)).StatusCode);
+                var edited = await browser.PutAsJsonAsync($"/api/drafts/{draft.Id}", new DraftEditRequest(draft.Amount,
+                    draft.Currency, draft.Description, draft.CategoryId, new(2026, 11, 1), draft.Version));
+                edited.EnsureSuccessStatusCode();
+                draft = await edited.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+                Assert.Null(draft.ErrorCode);
+                (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Date = draft.Date, Version = draft.Version })).EnsureSuccessStatusCode();
+            }
+        }
     }
 
 }

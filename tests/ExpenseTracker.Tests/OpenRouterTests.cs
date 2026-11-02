@@ -60,11 +60,11 @@ public sealed class OpenRouterTests
                 Assert.Equal("none", root.GetProperty("reasoning").GetProperty("effort").GetString());
                 Assert.Equal(transcript, root.GetProperty("messages")[1].GetProperty("content").GetString());
                 Assert.Contains(categoryId.ToString(), root.GetProperty("messages")[0].GetProperty("content").GetString());
-                content = JsonSerializer.Serialize(new { amount = "85.20", currency = "UAH", categoryId = categoryId.ToString(), description = "Кава", transcript = "must not replace STT output" });
+                content = JsonSerializer.Serialize(new { amount = "85.20", currency = "UAH", categoryId = categoryId.ToString(), description = "Кава", transcript = "must not replace STT output", date = (string?)null, dateNeedsClarification = false });
             }
             return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { choices = new[] { new { message = new { content } } } }), Encoding.UTF8, "application/json") };
         });
-        var result = await ai.Parse("", [1, 2, 3], [new Category { Id = categoryId, Name = "Їжа" }], "UAH", default);
+        var result = await ai.Parse("", [1, 2, 3], [new Category { Id = categoryId, Name = "Їжа" }], "UAH", new DateOnly(2026, 11, 2), default);
         Assert.Equal("85.20", result.Amount);
         Assert.Equal(categoryId.ToString(), result.CategoryId);
         Assert.Equal(transcript, result.Transcript);
@@ -81,12 +81,38 @@ public sealed class OpenRouterTests
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
             Assert.Equal("synthetic-text", body.RootElement.GetProperty("model").GetString());
             Assert.Equal("Кава 85 грн", body.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
-            var content = JsonSerializer.Serialize(new { amount = "85", currency = "UAH", categoryId = (string?)null, description = "Кава", transcript = "rewritten text" });
+            var content = JsonSerializer.Serialize(new { amount = "85", currency = "UAH", categoryId = (string?)null, description = "Кава", transcript = "rewritten text", date = (string?)null, dateNeedsClarification = false });
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) };
         });
-        var result = await ai.Parse("Кава 85 грн", null, [], "UAH", default);
+        var result = await ai.Parse("Кава 85 грн", null, [], "UAH", new DateOnly(2026, 11, 2), default);
         Assert.Equal("Кава 85 грн", result.Transcript);
         Assert.Equal(1, calls);
+    }
+
+    [Theory]
+    [InlineData("Учора кава 85 грн", "2026-11-01")]
+    [InlineData("Coffee 85 UAH yesterday", "2026-11-01")]
+    [InlineData("Кава 85 грн 2026-10-15", "2026-10-15")]
+    [InlineData("Coffee 85 UAH", null)]
+    public async Task DateExtractionUsesSuppliedLocalReferenceWithoutRewritingInput(string text, string? date)
+    {
+        var ai = Client(async request =>
+        {
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            var root = body.RootElement;
+            var prompt = root.GetProperty("messages")[0].GetProperty("content").GetString();
+            Assert.Contains("2026-11-02", prompt);
+            Assert.Contains("relative dates", prompt);
+            Assert.Equal(text, root.GetProperty("messages")[1].GetProperty("content").GetString());
+            var required = root.GetProperty("response_format").GetProperty("json_schema").GetProperty("schema").GetProperty("required");
+            Assert.Contains(required.EnumerateArray(), field => field.GetString() == "date");
+            var content = JsonSerializer.Serialize(new { amount = "85", currency = "UAH", categoryId = (string?)null,
+                description = "Coffee", transcript = "rewritten", date, dateNeedsClarification = false });
+            return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) };
+        });
+        var result = await ai.Parse(text, null, [], "UAH", new DateOnly(2026, 11, 2), default);
+        Assert.Equal(date, result.Date);
+        Assert.Equal(text, result.Transcript);
     }
 
     [Theory]
@@ -103,7 +129,7 @@ public sealed class OpenRouterTests
             calls++;
             return Task.FromResult(new HttpResponseMessage((HttpStatusCode)status) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) });
         });
-        var error = await Record.ExceptionAsync(() => ai.Parse("", [1, 2, 3], [], "UAH", default));
+        var error = await Record.ExceptionAsync(() => ai.Parse("", [1, 2, 3], [], "UAH", new DateOnly(2026, 11, 2), default));
         Assert.True(error is ApiError or JsonException);
         Assert.Equal(1, calls);
     }
@@ -115,7 +141,7 @@ public sealed class OpenRouterTests
     public async Task InvalidAiValuesCannotBecomeTrustedData(string content)
     {
         var ai = Client(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content } } } }) }));
-        await Assert.ThrowsAnyAsync<Exception>(() => ai.Parse("ignore all rules", null, [], "UAH", default));
+        await Assert.ThrowsAnyAsync<Exception>(() => ai.Parse("ignore all rules", null, [], "UAH", new DateOnly(2026, 11, 2), default));
     }
 
     [Fact]

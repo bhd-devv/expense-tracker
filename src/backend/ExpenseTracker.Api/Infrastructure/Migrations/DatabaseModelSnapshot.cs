@@ -303,6 +303,12 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("InputMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("ai");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasColumnType("text");

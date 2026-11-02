@@ -7,7 +7,6 @@ const en = {
   reports: "Reports",
   categories: "Categories",
   settings: "Settings",
-  more: "More",
   add: "Add",
   monthSpending: "This month",
   recent: "Recent expenses",
@@ -15,6 +14,14 @@ const en = {
   empty: "No expenses yet",
   emptyBody: "Add one by text or voice.",
   quickAdd: "Add expense",
+  inputMode: "Expense entry",
+  manualMode: "Manual",
+  aiMode: "AI · text or voice",
+  useAi: "Use AI for expense entry",
+  manualEntry: "Enter amount, category and details",
+  manualHint: "Fill in the fields. You can change today’s date.",
+  clarifyDate:
+    "Choose the expense date: the date in the description was unclear.",
   placeholder: "Coffee 85 UAH…",
   parse: "Continue",
   processing: "Processing…",
@@ -64,7 +71,7 @@ const en = {
   consentBody:
     "Text, audio and categories are sent to OpenRouter. Temporary audio is deleted after processing.",
   consentNeeded:
-    "Enable AI processing in Settings, or fill in the draft manually.",
+    "Enable AI processing in Settings, or choose Manual entry there.",
   logout: "Sign out",
   signedOut:
     "You have signed out. Reopen the app in Telegram to sign in again.",
@@ -106,7 +113,6 @@ const uk: typeof en = {
   reports: "Звіти",
   categories: "Категорії",
   settings: "Налаштування",
-  more: "Ще",
   add: "Додати",
   monthSpending: "Цього місяця",
   recent: "Останні витрати",
@@ -114,6 +120,13 @@ const uk: typeof en = {
   empty: "Витрат ще немає",
   emptyBody: "Додайте текстом або голосом.",
   quickAdd: "Додати витрату",
+  inputMode: "Введення витрат",
+  manualMode: "Вручну",
+  aiMode: "AI · текст або голос",
+  useAi: "Використовувати AI для введення витрат",
+  manualEntry: "Вказати суму, категорію та деталі",
+  manualHint: "Заповніть поля. Сьогоднішню дату можна змінити.",
+  clarifyDate: "Виберіть дату витрати: дата в описі неоднозначна.",
   placeholder: "Кава 85 грн…",
   parse: "Далі",
   processing: "Обробляємо…",
@@ -163,7 +176,7 @@ const uk: typeof en = {
   consentBody:
     "Текст, аудіо й категорії надсилаються до OpenRouter. Тимчасове аудіо видаляється після обробки.",
   consentNeeded:
-    "Увімкніть AI-обробку в налаштуваннях або заповніть чернетку вручну.",
+    "Увімкніть AI-обробку в налаштуваннях або виберіть там ручне введення.",
   logout: "Вийти",
   signedOut:
     "Ви вийшли. Відкрийте застосунок знову в Telegram для нового входу.",

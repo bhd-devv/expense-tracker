@@ -130,26 +130,34 @@ async def show_record(
         t["draft"] if kind == "d" else t["expenses"],
         f"{record.amount or '—'} {record.currency or ''}",
         record.description or "—",
-        str(record.date),
+        "—" if record.date == date.min else str(record.date),
         cat,
     ]
     if isinstance(record, DraftDto) and record.errorCode:
-        lines.append(t["manual"])
+        lines.append(
+            t["clarifyDate"] if record.errorCode == "date_needs_clarification" else t["manual"]
+        )
     if isinstance(record, DraftDto) and record.transcript:
         lines.append(record.transcript)
+    fields: tuple[str, ...] = ("amount", "currency", "description", "date", "categoryId")
+    if isinstance(record, DraftDto) and record.errorCode == "date_needs_clarification":
+        fields = ("date",)
     rows = [
         button(t, field, "field", entity, f"{kind}.{field}", int(record.version))
-        for field in ("amount", "currency", "description", "date", "categoryId")
+        for field in fields
     ]
+    if not isinstance(record, DraftDto) or record.errorCode != "date_needs_clarification":
+        rows.append(
+            button(
+                t,
+                "save" if kind == "d" else "delete",
+                "save" if kind == "d" else "delete",
+                entity,
+                kind,
+                int(record.version),
+            )
+        )
     rows += [
-        button(
-            t,
-            "save" if kind == "d" else "delete",
-            "save" if kind == "d" else "delete",
-            entity,
-            kind,
-            int(record.version),
-        ),
         button(
             t,
             "cancel" if kind == "d" else "back",
@@ -241,6 +249,7 @@ async def settings(message: Message, api: Api, profile: ProfileDto, t: dict[str,
         "timeZone": profile.timeZone,
         "currency": profile.currency,
         "aiConsent": t["enable"] if profile.aiConsent else t["disable"],
+        "inputMode": t["manualMode"] if profile.inputMode == "manual" else t["aiMode"],
     }
     rows = [
         button(
@@ -250,7 +259,7 @@ async def settings(message: Message, api: Api, profile: ProfileDto, t: dict[str,
             field,
             version=int(profile.version),
         )
-        for field in ("language", "theme", "timeZone", "currency", "aiConsent")
+        for field in ("inputMode", "language", "theme", "timeZone", "currency", "aiConsent")
     ]
     rows.append(button(t, "seed", "seed"))
     await message.answer(t["settings"], reply_markup=keyboard(rows, 1))
@@ -325,7 +334,7 @@ async def input_value(
     elif conversation.state == "preference":
         profile, _ = await profile_context(api)
         name, expected = field.split(".")
-        if name not in ("language", "theme", "timeZone", "currency", "aiConsent"):
+        if name not in ("language", "theme", "timeZone", "currency", "aiConsent", "inputMode"):
             raise ApiError("conflict", 409)
         if int(profile.version) != int(expected):
             raise ApiError("conflict", 409)
@@ -334,7 +343,8 @@ async def input_value(
         updated = await api.mutate("PUT", "/profile", ProfileDto, body)
         await state(api, "idle")
         await message.answer(
-            COPY[updated.language]["welcome"], reply_markup=menu(COPY[updated.language])
+            COPY[updated.language]["welcomeManual" if updated.inputMode == "manual" else "welcome"],
+            reply_markup=menu(COPY[updated.language]),
         )
         await settings(message, api, updated, COPY[updated.language])
     elif conversation.state == "period":
@@ -385,6 +395,7 @@ async def handle_message(
         return
     api = Api(api_client, message.from_user.id, message.from_user.language_code or "uk")
     profile, t = await profile_context(api)
+    request_id = str(uuid5(NAMESPACE_URL, f"telegram:{event_update.update_id}"))
     try:
         text = message.text or ""
         # Refresh reply keyboards left on devices by releases with the removed catalogue.
@@ -420,9 +431,20 @@ async def handle_message(
                 await settings(message, api, profile, t)
             elif selected == "app":
                 await message.answer(t["openAppPrompt"], reply_markup=app_keyboard(t, app_url))
+            elif selected == "add" and profile.inputMode == "manual":
+                draft = await api.mutate(
+                    "POST",
+                    "/drafts",
+                    DraftDto,
+                    {"requestId": request_id, "text": "", "mode": "manual"},
+                )
+                await message.answer(t["manualPrompt"], reply_markup=menu(t))
+                await show_record(message, api, "d", str(draft.id), t)
             else:
                 await message.answer(
-                    t["prompt"] if selected == "add" else t["welcome"],
+                    t["prompt"]
+                    if selected == "add"
+                    else t["welcomeManual" if profile.inputMode == "manual" else "welcome"],
                     reply_markup=menu(t),
                 )
                 if text.split(maxsplit=1)[0].split("@", 1)[0] == "/start":
@@ -436,7 +458,22 @@ async def handle_message(
             else:
                 await message.answer(t["input"])
             return
-        request_id = str(uuid5(NAMESPACE_URL, f"telegram:{event_update.update_id}"))
+        if profile.inputMode == "manual":
+            if message.voice or not text:
+                await message.answer(
+                    t["manualVoice"] if message.voice else t["manualPrompt"], reply_markup=menu(t)
+                )
+                return
+            draft = await api.mutate(
+                "POST",
+                "/drafts",
+                DraftDto,
+                {"requestId": request_id, "text": text, "mode": "manual"},
+            )
+            await state(api, "idle")
+            await message.answer(t["manualPrompt"])
+            await show_record(message, api, "d", str(draft.id), t)
+            return
         if message.voice:
             if not profile.aiConsent:
                 await message.answer(t["consentNeeded"])
@@ -558,7 +595,10 @@ async def handle_callback(
                 )
                 await state(api, "idle")
                 await message.edit_reply_markup(reply_markup=None)
-                await message.answer(t["welcome"], reply_markup=menu(t))
+                await message.answer(
+                    t["welcomeManual" if profile.inputMode == "manual" else "welcome"],
+                    reply_markup=menu(t),
+                )
             elif data.action == "delete":
                 await message.answer(
                     f"{t['delete']}? {record.description} · {record.amount} {record.currency}",
@@ -621,7 +661,10 @@ async def handle_callback(
                     )
         elif data.action == "reset":
             await state(api, "idle")
-            await message.answer(t["welcome"], reply_markup=menu(t))
+            await message.answer(
+                t["welcomeManual" if profile.inputMode == "manual" else "welcome"],
+                reply_markup=menu(t),
+            )
         elif data.action in ("browse", "page"):
             await browse(
                 message,
@@ -744,7 +787,7 @@ async def handle_callback(
             if int(profile.version) != data.version:
                 raise ApiError("conflict", 409)
             field = data.entity
-            if field not in ("language", "theme", "timeZone", "currency", "aiConsent"):
+            if field not in ("language", "theme", "timeZone", "currency", "aiConsent", "inputMode"):
                 raise ApiError("conflict", 409)
             current = await state(api, "preference", field=f"{field}.{data.version}")
             options = (
@@ -756,10 +799,19 @@ async def handle_callback(
                 if field == "currency"
                 else ("enable", "disable")
                 if field == "aiConsent"
+                else ("manual", "ai")
+                if field == "inputMode"
                 else ()
             )
             rows = [
-                button(t, option, "preference", option, field, int(current.version))
+                button(
+                    t,
+                    "manualMode" if option == "manual" else "aiMode" if option == "ai" else option,
+                    "preference",
+                    option,
+                    field,
+                    int(current.version),
+                )
                 for option in options
             ]
             rows.append(button(t, "cancel", "reset"))
@@ -774,14 +826,17 @@ async def handle_callback(
             name, expected = (conversation.field or "").split(".")
             if int(profile.version) != int(expected) or name != data.field:
                 raise ApiError("conflict", 409)
-            if name not in ("language", "theme", "timeZone", "currency", "aiConsent"):
+            if name not in ("language", "theme", "timeZone", "currency", "aiConsent", "inputMode"):
                 raise ApiError("conflict", 409)
             body = profile.model_dump(mode="json")
             body[name] = data.entity == "enable" if name == "aiConsent" else data.entity
             profile = await api.mutate("PUT", "/profile", ProfileDto, body)
             await state(api, "idle")
             t = COPY[profile.language]
-            await message.answer(t["welcome"], reply_markup=menu(t))
+            await message.answer(
+                t["welcomeManual" if profile.inputMode == "manual" else "welcome"],
+                reply_markup=menu(t),
+            )
             await settings(message, api, profile, t)
         else:
             raise ApiError("conflict", 409)

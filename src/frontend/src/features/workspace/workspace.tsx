@@ -22,7 +22,6 @@ import {
   LoaderCircle,
   LogOut,
   Mic,
-  Ellipsis,
   Plus,
   RefreshCw,
   Settings2,
@@ -146,7 +145,11 @@ export default function Workspace() {
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
   const [editor, setEditor] = useState<Editor>();
-  const [pending, setPending] = useState<{ requestId: string; text: string }>();
+  const [pending, setPending] = useState<{
+    requestId: string;
+    text: string;
+    mode: "manual" | "ai";
+  }>();
   const [recoverId, setRecoverId] = useState("");
   const [filters, setFilters] = useState({
     from: "",
@@ -155,13 +158,13 @@ export default function Workspace() {
     page: 0,
   });
   const [recording, setRecording] = useState(false);
-  const mobileMenu = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const voiceTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
   const lang = language(profile?.language ?? "uk");
   const t = dictionaries[lang];
+  const inputMode = pending?.mode ?? profile?.inputMode ?? "ai";
   const query = new URLSearchParams(
     Object.entries(filters)
       .filter(([, v]) => v !== "")
@@ -282,7 +285,12 @@ export default function Workspace() {
     setEditor({ kind: "draft", value: draft });
   }
   async function createDraft() {
-    const input = pending ?? { requestId: crypto.randomUUID(), text };
+    const mode: "manual" | "ai" = inputMode === "manual" ? "manual" : "ai";
+    const input = pending ?? {
+      requestId: crypto.randomUUID(),
+      text: inputMode === "manual" ? "" : text,
+      mode,
+    };
     setPending(input);
     await action(async () => {
       showDraft(await request("/drafts", draftSchema, "POST", input));
@@ -411,13 +419,13 @@ export default function Workspace() {
           lime<span className="brand-dot">.</span>
         </a>
         <nav aria-label={t.brand}>
-          {nav.map(({ key, Icon }, index) => (
+          {nav.map(({ key, Icon }) => (
             <button
               key={key}
               aria-label={t[key]}
               aria-current={tab === key ? "page" : undefined}
               className={tab === key ? "selected" : ""}
-              data-secondary={index >= 3}
+              data-desktop-only={key === "expenses"}
               onClick={() => {
                 setFault("");
                 setTab(key);
@@ -427,37 +435,7 @@ export default function Workspace() {
               <span>{t[key]}</span>
             </button>
           ))}
-          <button
-            className={`mobile-more ${nav.slice(3).some(({ key }) => key === tab) ? "selected" : ""}`}
-            popoverTarget="mobile-navigation"
-          >
-            <Ellipsis size={23} strokeWidth={1.8} aria-hidden="true" />
-            <span>{t.more}</span>
-          </button>
         </nav>
-        <div
-          id="mobile-navigation"
-          className="mobile-menu"
-          popover="auto"
-          ref={mobileMenu}
-        >
-          {nav.slice(3).map(({ key, Icon }) => (
-            <button
-              key={key}
-              aria-current={tab === key ? "page" : undefined}
-              className={tab === key ? "selected" : ""}
-              onClick={() => {
-                setFault("");
-                setTab(key);
-                mobileMenu.current?.hidePopover();
-              }}
-            >
-              <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
-              <span>{t[key]}</span>
-              <ChevronRight size={18} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
       </aside>
       <main className="main-content">
         <header className="topbar">
@@ -494,6 +472,10 @@ export default function Workspace() {
                     return;
                   }
                   setTab("overview");
+                  if (inputMode === "manual") {
+                    void createDraft();
+                    return;
+                  }
                   requestAnimationFrame(() =>
                     document.getElementById("quick-add")?.focus(),
                   );
@@ -575,55 +557,74 @@ export default function Workspace() {
                   </section>
                   <section className="quick-card">
                     <h2>{t.quickAdd}</h2>
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void createDraft();
-                      }}
-                    >
-                      <label className="sr-only" htmlFor="quick-add">
-                        {t.description}
-                      </label>
-                      <textarea
-                        id="quick-add"
-                        maxLength={2000}
-                        placeholder={t.placeholder}
-                        value={text}
-                        disabled={busy || !!pending}
-                        onChange={(event) => setText(event.target.value)}
-                      />
-                      <div className="quick-actions">
+                    {inputMode === "manual" ? (
+                      <div className="manual-entry">
+                        <p>{t.manualHint}</p>
                         <button
-                          type="button"
-                          className={`button secondary ${recording ? "recording" : ""}`}
-                          disabled={busy}
-                          aria-label={recording ? t.stop : t.voice}
-                          onClick={() => void record()}
-                        >
-                          {recording ? (
-                            <Square size={22} />
-                          ) : (
-                            <Mic size={22} strokeWidth={1.8} />
-                          )}
-                          <span>{recording ? t.stop : t.voiceShort}</span>
-                        </button>
-                        <button
+                          id="quick-add"
                           className="button primary"
-                          aria-label={pending ? t.retry : t.parse}
-                          disabled={busy || (!text.trim() && !pending)}
+                          disabled={busy}
+                          onClick={() => void createDraft()}
                         >
-                          <span>{pending ? t.retry : t.parse}</span>
-                          {busy ? (
-                            <LoaderCircle size={17} className="spin" />
-                          ) : (
-                            <ChevronRight size={20} />
-                          )}
+                          <PencilLine size={20} aria-hidden="true" />
+                          {pending ? t.retry : t.manualEntry}
                         </button>
                       </div>
-                    </form>
+                    ) : (
+                      <form
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void createDraft();
+                        }}
+                      >
+                        <label className="sr-only" htmlFor="quick-add">
+                          {t.description}
+                        </label>
+                        <textarea
+                          id="quick-add"
+                          maxLength={2000}
+                          placeholder={t.placeholder}
+                          value={text}
+                          disabled={busy || !!pending}
+                          onChange={(event) => setText(event.target.value)}
+                        />
+                        <div className="quick-actions">
+                          <button
+                            type="button"
+                            className={`button secondary ${recording ? "recording" : ""}`}
+                            disabled={busy}
+                            aria-label={recording ? t.stop : t.voice}
+                            onClick={() => void record()}
+                          >
+                            {recording ? (
+                              <Square size={22} />
+                            ) : (
+                              <Mic size={22} strokeWidth={1.8} />
+                            )}
+                            <span>{recording ? t.stop : t.voiceShort}</span>
+                          </button>
+                          <button
+                            className="button primary"
+                            aria-label={pending ? t.retry : t.parse}
+                            disabled={busy || (!text.trim() && !pending)}
+                          >
+                            <span>{pending ? t.retry : t.parse}</span>
+                            {busy ? (
+                              <LoaderCircle size={17} className="spin" />
+                            ) : (
+                              <ChevronRight size={20} />
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
                     {(recording || busy) && (
                       <p className="hint" role="status">
-                        {recording ? t.recording : t.processing}
+                        {recording
+                          ? t.recording
+                          : inputMode === "manual"
+                            ? t.loading
+                            : t.processing}
                       </p>
                     )}
                     {recoverId && (
@@ -981,7 +982,11 @@ function ExpenseEditor({
   const [value, setValue] = useState({
     amount: editor.value.amount ?? "",
     description: editor.value.description,
-    date: editor.value.date,
+    date:
+      editor.kind === "draft" &&
+      editor.value.errorCode === "date_needs_clarification"
+        ? ""
+        : editor.value.date,
     currency: editor.value.currency,
     categoryId: editor.value.categoryId ?? "",
     version: editor.value.version,
@@ -1022,11 +1027,13 @@ function ExpenseEditor({
         </h2>
         {editor.kind === "draft" && editor.value.errorCode && (
           <p className="hint">
-            {editor.value.errorCode === "ai_consent_required"
-              ? t.consentNeeded
-              : editor.value.status === "failed"
-                ? t.aiError
-                : t.clarify}
+            {editor.value.errorCode === "date_needs_clarification"
+              ? t.clarifyDate
+              : editor.value.errorCode === "ai_consent_required"
+                ? t.consentNeeded
+                : editor.value.status === "failed"
+                  ? t.aiError
+                  : t.clarify}
           </p>
         )}
         {error && (
@@ -1343,6 +1350,24 @@ function Preferences({
           </select>
         </label>
       </div>
+      <fieldset className="input-mode">
+        <legend>{t.inputMode}</legend>
+        <label>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={value.inputMode === "ai"}
+            onChange={(e) =>
+              setValue({
+                ...value,
+                inputMode: e.target.checked ? "ai" : "manual",
+              })
+            }
+          />
+          {t.useAi}
+        </label>
+        <p>{value.inputMode === "ai" ? t.aiMode : t.manualMode}</p>
+      </fieldset>
       <div className="consent">
         <label>
           <input

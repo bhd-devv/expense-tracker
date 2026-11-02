@@ -41,6 +41,7 @@ class ConversationRequest(BaseModel):
 class CreateDraftRequest(BaseModel):
     requestId: UUID
     text: str
+    mode: str | None = None
 
 
 class CsrfDto(BaseModel):
@@ -123,6 +124,7 @@ class PreferencesRequest(BaseModel):
     currency: str
     aiConsent: bool
     version: int
+    inputMode: str | None = None
 
 
 class ProfileDto(BaseModel):
@@ -134,6 +136,7 @@ class ProfileDto(BaseModel):
     aiConsent: bool
     version: int
     today: date_aliased
+    inputMode: str | None = "ai"
 
 
 class PublicConfigDto(BaseModel):

@@ -1606,6 +1606,8 @@ export interface components {
       /** Format: uuid */
       requestId: string;
       text: string;
+      /** @default null */
+      mode: null | string;
     };
     CsrfDto: {
       token: string;
@@ -1701,6 +1703,8 @@ export interface components {
       aiConsent: boolean;
       /** Format: int32 */
       version: number;
+      /** @default null */
+      inputMode: null | string;
     };
     ProfileDto: {
       /** Format: uuid */
@@ -1714,6 +1718,8 @@ export interface components {
       version: number;
       /** Format: date */
       today: string;
+      /** @default ai */
+      inputMode: string;
     };
     PublicConfigDto: {
       botUsername: string;

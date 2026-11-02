@@ -59,6 +59,36 @@ export const catalogSchema: z.ZodType<components["schemas"]["CatalogDto"]> =
   z.object({
     categories: z.array(itemSchema),
   });
+export const savingsAccountSchema: z.ZodType<
+  components["schemas"]["SavingsAccountDto"]
+> = z.object({
+  id,
+  name: z.string(),
+  currency: z.string(),
+  balance: z.string(),
+  added: z.string(),
+  spent: z.string(),
+});
+export const savingsAccountsSchema: z.ZodType<
+  components["schemas"]["SavingsAccountsDto"]
+> = z.object({ items: z.array(savingsAccountSchema) });
+export const savingsEntrySchema: z.ZodType<
+  components["schemas"]["SavingsEntryDto"]
+> = z.object({
+  id,
+  kind: z.enum(["deposit", "withdrawal"]),
+  amount: z.string(),
+  date: z.string(),
+  description: z.string(),
+});
+export const savingsPageSchema: z.ZodType<
+  components["schemas"]["SavingsEntryPage"]
+> = z.object({
+  account: savingsAccountSchema,
+  items: z.array(savingsEntrySchema),
+  page: z.number().int(),
+  hasMore: z.boolean(),
+});
 export const expenseSchema: z.ZodType<components["schemas"]["ExpenseDto"]> =
   z.object({
     id,

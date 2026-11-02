@@ -303,6 +303,38 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                     b.ToTable("Sessions");
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsAccount", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(60).HasColumnType("character varying(60)");
+                    b.Property<string>("Currency").IsRequired().HasColumnType("text");
+                    b.Property<decimal>("Added").HasPrecision(28, 4).HasColumnType("numeric(28,4)");
+                    b.Property<decimal>("Spent").HasPrecision(28, 4).HasColumnType("numeric(28,4)");
+                    b.HasKey("Id");
+                    b.HasAlternateKey("UserId", "Id");
+                    b.ToTable("SavingsAccounts", t => t.HasCheckConstraint("valid_savings_balance", "\"Added\" >= 0 AND \"Spent\" >= 0 AND \"Spent\" <= \"Added\""));
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsEntry", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.Property<Guid>("AccountId").HasColumnType("uuid");
+                    b.Property<string>("Kind").IsRequired().HasColumnType("text");
+                    b.Property<decimal>("Amount").HasPrecision(20, 4).HasColumnType("numeric(20,4)");
+                    b.Property<DateOnly>("Date").HasColumnType("date");
+                    b.Property<string>("Description").IsRequired().HasMaxLength(500).HasColumnType("character varying(500)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("UserId", "AccountId", "Date", "CreatedAt", "Id");
+                    b.ToTable("SavingsEntries", t =>
+                        {
+                            t.HasCheckConstraint("positive_savings_amount", "\"Amount\" > 0");
+                            t.HasCheckConstraint("valid_savings_kind", "\"Kind\" IN ('deposit', 'withdrawal')");
+                        });
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -393,6 +425,17 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .HasPrincipalKey("UserId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsAccount", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null).WithMany().HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsEntry", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.SavingsAccount", null).WithMany().HasForeignKey("UserId", "AccountId")
+                        .HasPrincipalKey("UserId", "Id").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 #pragma warning restore 612, 618
         }

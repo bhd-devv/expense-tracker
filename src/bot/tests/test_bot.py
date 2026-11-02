@@ -70,7 +70,7 @@ def test_callback_identity_is_sender_and_all_callbacks_fit() -> None:
         assert all(button.web_app is None for row in reply.keyboard for button in row)
         launch = app_keyboard(t, "https://example.com").inline_keyboard[0][0]
         assert launch.web_app is not None and launch.web_app.url == "https://example.com"
-        for field in ("amount", "description", "currency", "categoryId", "date"):
+        for field in ("amount", "description", "categoryId", "date"):
             packed = Action(
                 action="field", entity="a" * 32, field="d." + field, version=100000
             ).pack()

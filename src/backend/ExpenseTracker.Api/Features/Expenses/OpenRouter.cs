@@ -52,7 +52,7 @@ public sealed class OpenRouter(HttpClient http, IConfiguration config, ILogger<O
             + "Resolve relative dates against the reference date, never the processing date. Return ISO yyyy-MM-dd. "
             + "If no date is specified, return null date and false dateNeedsClarification; the backend supplies the reference date. "
             + "For an ambiguous or invalid explicit date, return null date and true dateNeedsClarification. "
-            + $"Currency defaults to {currency} only if not mentioned. Amount is a positive plain decimal STRING, not a JSON number. "
+            + $"Currency is always {currency}, the user setting. Preserve the stated numeric amount exactly; never convert currencies, even if another currency is mentioned. Amount is a positive plain decimal STRING, not a JSON number. "
             + "Description is a short purchase description in the input language. Transcript is the original input text. Categories: "
             + JsonSerializer.Serialize(categories.Select(x => new { id = x.Id, name = x.Name, code = x.Code }));
         var schema = new

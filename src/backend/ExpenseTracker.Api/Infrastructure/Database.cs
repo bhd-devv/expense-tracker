@@ -63,6 +63,28 @@ public sealed class Draft
     public Guid? ExpenseId { get; set; }
 }
 
+public sealed class SavingsAccount
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string Name { get; set; } = "";
+    public string Currency { get; set; } = "UAH";
+    public decimal Added { get; set; }
+    public decimal Spent { get; set; }
+}
+
+public sealed class SavingsEntry
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid AccountId { get; set; }
+    public string Kind { get; set; } = "deposit";
+    public decimal Amount { get; set; }
+    public DateOnly Date { get; set; }
+    public string Description { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class Session
 {
     public string Id { get; set; } = "";
@@ -118,6 +140,8 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DemoSeed> DemoSeeds => Set<DemoSeed>();
+    public DbSet<SavingsAccount> SavingsAccounts => Set<SavingsAccount>();
+    public DbSet<SavingsEntry> SavingsEntries => Set<SavingsEntry>();
 
     // Serialize short financial/catalogue mutations for one owner. Never hold this over AI/Telegram I/O.
     public async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> LockUser(User user, CancellationToken ct)
@@ -162,5 +186,27 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
         model.Entity<Delivery>().HasIndex(x => new { x.Kind, x.CompletedAt, x.AvailableAt });
         model.Entity<DemoSeed>().HasKey(x => new { x.UserId, x.Period });
         model.Entity<DemoSeed>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+        model.Entity<SavingsAccount>(entity =>
+        {
+            entity.HasAlternateKey(x => new { x.UserId, x.Id });
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            entity.Property(x => x.Name).HasMaxLength(60);
+            entity.Property(x => x.Added).HasPrecision(28, 4);
+            entity.Property(x => x.Spent).HasPrecision(28, 4);
+            entity.ToTable(t => t.HasCheckConstraint("valid_savings_balance", "\"Added\" >= 0 AND \"Spent\" >= 0 AND \"Spent\" <= \"Added\""));
+        });
+        model.Entity<SavingsEntry>(entity =>
+        {
+            entity.Property(x => x.Amount).HasPrecision(20, 4);
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.HasIndex(x => new { x.UserId, x.AccountId, x.Date, x.CreatedAt, x.Id });
+            entity.HasOne<SavingsAccount>().WithMany().HasForeignKey(x => new { x.UserId, x.AccountId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("positive_savings_amount", "\"Amount\" > 0");
+                t.HasCheckConstraint("valid_savings_kind", "\"Kind\" IN ('deposit', 'withdrawal')");
+            });
+        });
     }
 }

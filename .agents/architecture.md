@@ -136,3 +136,19 @@ PostgreSQL — єдине джерело стану: записи, сесії, b
 Idempotency key не є дозволом на прихований retry. Після невідомої відповіді
 спочатку встанови результат або запропонуй явну повторну дію з тим самим key.
 Не тримай транзакції відкритими під час виклику Telegram або іншого HTTP API.
+
+## Окремий журнал накопичень
+
+Feature `Savings` на .NET обслуговує `/api/savings` і приватні
+`/internal/bot/actor/savings` через ті самі use cases. GET списку, POST
+створення та GET/POST `/{id}/entries`; усі запити actor-scoped.
+`SavingsAccounts` зберігає власника, назву, legacy валюту, decimal-підсумки
+Added/Spent (`numeric(28,4)`). `SavingsEntries` — незмінні операції із
+`numeric(20,4)` сумою та composite FK `(UserId, AccountId)` до рахунка.
+Account/entry ID є request ID; дані незмінні, тому окремий hash не потрібен.
+Owner advisory lock захищає залишок, totals+entry зберігаються одним commit.
+DB checks захищають додатну суму, kind і невід'ємний залишок. Зв'язків із
+Expense/Category немає. Деталі — [product](product.md).
+
+Валюта savings DTO завжди з профілю; legacy account/request Currency не
+перевизначає позначення. Це узгоджено зі спільними налаштуваннями валюти.

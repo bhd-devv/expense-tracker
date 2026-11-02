@@ -339,9 +339,7 @@ async def test_removed_catalogue_actions_refresh_menu_without_creating_expenses(
 
 @pytest.mark.parametrize("language", ["uk", "en"])
 @pytest.mark.parametrize("kind", ["d", "e"])
-async def test_currency_button_updates_record_without_a_financial_account(
-    language: str, kind: str
-) -> None:
+async def test_obsolete_currency_button_cannot_change_record(language: str, kind: str) -> None:
     record_id = "00000000-0000-0000-0000-000000000043"
     category_id = "00000000-0000-0000-0000-000000000044"
     record = {
@@ -424,19 +422,10 @@ async def test_currency_button_updates_record_without_a_financial_account(
         base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
     ) as client:
         await handle_callback(callback, action, client, "https://example.com")
-    assert changes == [
-        {
-            "amount": "12.5",
-            "currency": "USD",
-            "description": "Synthetic lunch",
-            "date": "2026-10-12",
-            "categoryId": category_id,
-            "version": 3,
-        }
-    ]
+    assert changes == []
     response = session.sent[-1]
     assert isinstance(response, SendMessage)
-    assert "12.5 USD" in response.text
+    assert response.text == COPY[language]["stale"]
     await bot.session.close()
 
 
@@ -534,7 +523,6 @@ async def test_manual_entry_uses_fields_without_ai_or_audio_download(
         ]
         assert {action.field for action in actions if action.action == "field"} == {
             "d.amount",
-            "d.currency",
             "d.description",
             "d.date",
             "d.categoryId",
@@ -898,7 +886,7 @@ async def test_inline_category_actions_paginate_full_catalog_within_telegram_but
 
 
 @pytest.mark.parametrize("language", ["uk", "en"])
-async def test_category_limit_currency_amount_progress_clear_and_stale_callbacks(
+async def test_category_limit_uses_profile_currency_and_checks_stale_callbacks(
     language: str,
 ) -> None:
     entity_id = "00000000-0000-0000-0000-000000000043"
@@ -949,10 +937,10 @@ async def test_category_limit_currency_amount_progress_clear_and_stale_callbacks
             item["limit"] = None
         else:
             assert payload["amount"] == "80.00"
-            assert payload["currency"] == "USD"
+            assert payload["currency"] == "UAH"
             item["limit"] = {
                 "amount": "80",
-                "currency": "USD",
+                "currency": "UAH",
                 "spent": "100",
                 "usedPercent": 125,
                 "exceeded": True,
@@ -987,12 +975,20 @@ async def test_category_limit_currency_amount_progress_clear_and_stale_callbacks
             action="catlimit", entity=entity_id.replace("-", ""), field="categories", version=3
         )
         await click(original)
-        assert conversation["state"] == "category_limit_currency"
+        assert conversation["state"] == "category_limit"
+        prompt = session.sent[-1]
+        assert isinstance(prompt, SendMessage)
+        assert "UAH" in prompt.text
+        assert isinstance(prompt.reply_markup, InlineKeyboardMarkup)
+        assert all(
+            Action.unpack(button.callback_data).action != "limitcurrency"
+            for row in prompt.reply_markup.inline_keyboard
+            for button in row
+            if button.callback_data
+        )
         await click(Action(action="limitcurrency", entity="BTC", version=1))
         assert not mutations
         assert session.sent[-1].text == COPY[language]["stale"]
-        await click(Action(action="limitcurrency", entity="USD", version=1))
-        assert conversation["state"] == "category_limit"
         typed = Message(
             message_id=2,
             date=datetime.now(UTC),
@@ -1006,7 +1002,7 @@ async def test_category_limit_currency_amount_progress_clear_and_stale_callbacks
         assert "125%" in session.sent[-1].text
         assert "██████████" in session.sent[-1].text
         assert COPY[language]["limitExceeded"] in session.sent[-1].text
-        assert "100 / 80 USD" in session.sent[-1].text
+        assert "100 / 80 UAH" in session.sent[-1].text
         await click(original)
         assert len(mutations) == 1
         assert session.sent[-1].text == COPY[language]["stale"]

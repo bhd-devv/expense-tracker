@@ -6,6 +6,30 @@ const en = {
   expenses: "Expenses",
   reports: "Reports",
   categories: "Categories",
+  savings: "Savings accounts",
+  newSavings: "Create account",
+  emptySavings: "No savings accounts yet",
+  savingsBalance: "Balance",
+  savingsAdded: "Added",
+  savingsSpent: "Spent",
+  deposit: "Add money",
+  withdrawal: "Spend money",
+  depositRecord: "Deposit",
+  withdrawalRecord: "Withdrawal",
+  savingsHistory: "Transaction history",
+  emptySavingsHistory: "No transactions yet",
+  savingsNote: "Note (optional)",
+  savingsBack: "All accounts",
+  savingsHome: "Back to overview",
+  savingsSaved: "Transaction saved",
+  insufficientSavings:
+    "Not enough money in this account. Refresh the balance or enter a smaller amount.",
+  savingsUnknown:
+    "The result is unknown. Retry this same operation to establish the result before adding another.",
+  savingsLimit: "The savings account limit has been reached.",
+  savingsPending:
+    "An operation is awaiting confirmation. Retry it to establish the result.",
+
   emptyCategories: "No categories yet",
   monthlyLimit: "Monthly limit",
   setLimit: "Set limit",
@@ -13,8 +37,7 @@ const en = {
   removeLimit: "Remove limit",
   limitUsed: "Used",
   limitExceeded: "Limit exceeded",
-  limitCurrencyHint:
-    "Only expenses in the limit currency count. No currency conversion.",
+  limitCurrencyHint: "All category expenses count toward the limit.",
   icon: "Icon",
   chooseIcon: "Choose icon",
   searchIcons: "Search icons…",
@@ -74,6 +97,8 @@ const en = {
   noReport: "Nothing to report yet",
   name: "Name",
   currency: "Currency",
+  currencyHint:
+    "Applies everywhere. Changing the currency keeps all amounts unchanged.",
   archived: "Archived",
   create: "Create",
   rename: "Rename",
@@ -104,7 +129,7 @@ const en = {
     "This record has changed. Refresh and check it before saving again.",
   invalid: "Check the entered values and try again.",
   aiError: "AI is unavailable. You can fill in this draft manually.",
-  clarify: "Please check the amount, currency and category.",
+  clarify: "Please check the amount and category.",
   expired: "This draft expired. Start a new expense.",
   unknown:
     "The result is not yet known. Refresh to check before creating another expense.",
@@ -128,6 +153,30 @@ const uk: typeof en = {
   expenses: "Витрати",
   reports: "Звіти",
   categories: "Категорії",
+  savings: "Накопичувальні рахунки",
+  newSavings: "Створити рахунок",
+  emptySavings: "Поки немає накопичувальних рахунків",
+  savingsBalance: "Залишок",
+  savingsAdded: "Додано",
+  savingsSpent: "Витрачено",
+  deposit: "Поповнити",
+  withdrawal: "Витратити",
+  depositRecord: "Поповнення",
+  withdrawalRecord: "Списання",
+  savingsHistory: "Історія операцій",
+  emptySavingsHistory: "Поки немає операцій",
+  savingsNote: "Нотатка (необов’язково)",
+  savingsBack: "Усі рахунки",
+  savingsHome: "На головну",
+  savingsSaved: "Операцію збережено",
+  insufficientSavings:
+    "На рахунку недостатньо коштів. Оновіть залишок або вкажіть меншу суму.",
+  savingsUnknown:
+    "Результат невідомий. Повторіть цю саму операцію, щоб встановити результат перед додаванням іншої.",
+  savingsLimit: "Досягнуто ліміту накопичувальних рахунків.",
+  savingsPending:
+    "Є операція з невідомим результатом. Повторіть її, щоб встановити результат.",
+
   emptyCategories: "Категорій ще немає",
   monthlyLimit: "Місячний ліміт",
   setLimit: "Встановити ліміт",
@@ -135,8 +184,7 @@ const uk: typeof en = {
   removeLimit: "Прибрати ліміт",
   limitUsed: "Використано",
   limitExceeded: "Ліміт перевищено",
-  limitCurrencyHint:
-    "Враховуються лише витрати у валюті ліміту, без конвертації.",
+  limitCurrencyHint: "До ліміту входять усі витрати категорії.",
   icon: "Іконка",
   chooseIcon: "Вибрати іконку",
   searchIcons: "Пошук іконок…",
@@ -195,6 +243,8 @@ const uk: typeof en = {
   noReport: "Поки немає даних для звіту",
   name: "Назва",
   currency: "Валюта",
+  currencyHint:
+    "Спільна для всіх сум. Зміна валюти змінює лише позначення, без перерахунку.",
   archived: "В архіві",
   create: "Створити",
   rename: "Перейменувати",
@@ -226,7 +276,7 @@ const uk: typeof en = {
     "Запис уже змінився. Оновіть дані та перевірте їх перед збереженням.",
   invalid: "Перевірте введені значення та спробуйте ще раз.",
   aiError: "AI зараз недоступний. Заповніть цю чернетку вручну.",
-  clarify: "Перевірте суму, валюту та категорію.",
+  clarify: "Перевірте суму та категорію.",
   expired: "Строк дії чернетки минув. Створіть нову витрату.",
   unknown:
     "Результат поки невідомий. Оновіть дані перед створенням ще однієї витрати.",
@@ -267,13 +317,29 @@ export function categoryName(
   return item.name;
 }
 
+export function currencySymbol(currency: string) {
+  const symbols: Record<string, string> = {
+    UAH: "₴",
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+    PLN: "zł",
+    JPY: "¥",
+  };
+  return symbols[currency] ?? currency;
+}
+
 export function money(value: string, currency: string, lang: Language) {
   const [whole, fraction = ""] = value.split(".");
   const grouped = new Intl.NumberFormat(
     lang === "uk" ? "uk-UA" : "en-GB",
   ).format(BigInt(whole));
-  const decimals = currency === "JPY" ? "" : (fraction + "00").slice(0, 2);
-  return `${grouped}${decimals ? `${lang === "uk" ? "," : "."}${decimals}` : ""} ${currency}`;
+  const decimals = fraction
+    ? fraction.padEnd(2, "0")
+    : currency === "JPY"
+      ? ""
+      : "00";
+  return `${grouped}${decimals ? `${lang === "uk" ? "," : "."}${decimals}` : ""} ${currencySymbol(currency)}`;
 }
 
 export function records(count: number, lang: Language) {

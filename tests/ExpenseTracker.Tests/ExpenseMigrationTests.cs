@@ -76,7 +76,8 @@ public sealed class ExpenseMigrationTests
             var obsoleteColumns = await db.Database.SqlQuery<int>($"""
                 SELECT count(*)::integer AS "Value" FROM information_schema.columns
                 WHERE table_schema = {schema}
-                  AND (table_name = 'Accounts' OR column_name IN ('AccountId', 'DefaultAccountId'))
+                  AND (table_name = 'Accounts' OR (table_name IN ('Expenses', 'Drafts', 'Users')
+                       AND column_name IN ('AccountId', 'DefaultAccountId')))
                 """).SingleAsync();
             Assert.Equal(0, obsoleteColumns);
         }

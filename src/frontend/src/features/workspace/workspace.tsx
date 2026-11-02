@@ -16,6 +16,7 @@ import {
   LogOut,
   Mic,
   Plus,
+  PiggyBank,
   RefreshCw,
   Settings2,
   Square,
@@ -49,6 +50,7 @@ import {
   dictionaries,
   language,
   money,
+  currencySymbol,
   records,
   type Copy,
   type Language,
@@ -60,8 +62,15 @@ import {
 } from "@/features/categories/category-icon";
 import IconPicker from "@/features/categories/icon-picker";
 import CategoryLimit from "@/features/categories/category-limit";
+import Savings from "@/features/savings/savings";
 
-type Tab = "overview" | "expenses" | "reports" | "categories" | "settings";
+type Tab =
+  | "overview"
+  | "expenses"
+  | "reports"
+  | "categories"
+  | "settings"
+  | "savings";
 type Editor =
   | { kind: "draft"; value: Draft }
   | { kind: "expense"; value: Expense };
@@ -88,10 +97,13 @@ function Money({
   lang: Language;
 }) {
   const formatted = money(amount, currency, lang);
+  const symbol = currencySymbol(currency);
   return (
     <span className="money">
-      <span>{formatted.slice(0, -(currency.length + 1))}</span>{" "}
-      <span className="money-currency">{currency}</span>
+      <span>{formatted.slice(0, -(symbol.length + 1))}</span>{" "}
+      <span className="money-currency" title={currency}>
+        {symbol}
+      </span>
     </span>
   );
 }
@@ -461,7 +473,7 @@ export default function Workspace() {
         ) : (
           <section className="page-heading">
             <h1>{t[tab]}</h1>
-            {tab !== "settings" && (
+            {tab !== "settings" && tab !== "savings" && (
               <button
                 className="button primary"
                 onClick={() => {
@@ -644,6 +656,14 @@ export default function Workspace() {
                     )}
                   </section>
                 </div>
+                <button
+                  className="savings-home-link"
+                  onClick={() => setTab("savings")}
+                >
+                  <PiggyBank size={24} aria-hidden="true" />
+                  <span>{t.savings}</span>
+                  <ChevronRight size={20} aria-hidden="true" />
+                </button>
                 <div className="section-heading">
                   <div>
                     <h2>{t.recent}</h2>
@@ -654,6 +674,14 @@ export default function Workspace() {
                   </button>
                 </div>
               </>
+            )}
+            {tab === "savings" && (
+              <Savings
+                profile={profile}
+                lang={lang}
+                t={t}
+                onHome={() => setTab("overview")}
+              />
             )}
             {(tab === "expenses" || tab === "reports") && (
               <details className="filter-panel">
@@ -1024,7 +1052,9 @@ function ExpenseEditor({
         }}
       >
         <div className="dialog-top">
-          <ReceiptText size={24} strokeWidth={1.8} aria-hidden="true" />
+          <h2 id="expense-editor-title">
+            {editor.kind === "draft" ? t.draft : t.edit}
+          </h2>
           <button
             type="button"
             className="icon-button"
@@ -1035,60 +1065,46 @@ function ExpenseEditor({
             <X size={21} />
           </button>
         </div>
-        <h2 id="expense-editor-title">
-          {editor.kind === "draft" ? t.draft : t.edit}
-        </h2>
-        {editor.kind === "draft" && editor.value.errorCode && (
-          <p className="hint">
-            {editor.value.errorCode === "date_needs_clarification"
-              ? t.clarifyDate
-              : editor.value.errorCode === "ai_consent_required"
-                ? t.consentNeeded
-                : editor.value.status === "failed"
-                  ? t.aiError
-                  : t.clarify}
-          </p>
-        )}
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <label>
-          {t.amount}
-          <input
-            autoFocus
-            required
-            inputMode="decimal"
-            pattern="[0-9]+([.,][0-9]{1,4})?"
-            value={value.amount}
-            onChange={(e) =>
-              setValue({ ...value, amount: e.target.value.replace(",", ".") })
-            }
-          />
-        </label>
-        <label>
-          {t.description}
-          <input
-            required
-            maxLength={500}
-            value={value.description}
-            onChange={(e) =>
-              setValue({ ...value, description: e.target.value })
-            }
-          />
-        </label>
-        <div className="form-grid">
+        <div className="editor-fields">
+          {editor.kind === "draft" && editor.value.errorCode && (
+            <p className="hint">
+              {editor.value.errorCode === "date_needs_clarification"
+                ? t.clarifyDate
+                : editor.value.errorCode === "ai_consent_required"
+                  ? t.consentNeeded
+                  : editor.value.status === "failed"
+                    ? t.aiError
+                    : t.clarify}
+            </p>
+          )}
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
           <label>
-            {t.currency}
-            <select
-              value={value.currency}
-              onChange={(e) => setValue({ ...value, currency: e.target.value })}
-            >
-              {currencies.map((currency) => (
-                <option key={currency}>{currency}</option>
-              ))}
-            </select>
+            {t.amount} · {value.currency}
+            <input
+              autoFocus
+              required
+              inputMode="decimal"
+              pattern="[0-9]+([.,][0-9]{1,4})?"
+              value={value.amount}
+              onChange={(e) =>
+                setValue({ ...value, amount: e.target.value.replace(",", ".") })
+              }
+            />
+          </label>
+          <label>
+            {t.description}
+            <input
+              required
+              maxLength={500}
+              value={value.description}
+              onChange={(e) =>
+                setValue({ ...value, description: e.target.value })
+              }
+            />
           </label>
           <label>
             {t.category}
@@ -1111,22 +1127,22 @@ function ExpenseEditor({
                 ))}
             </select>
           </label>
+          <label>
+            {t.date}
+            <input
+              required
+              type="date"
+              value={value.date}
+              onChange={(e) => setValue({ ...value, date: e.target.value })}
+            />
+          </label>
+          {editor.kind === "draft" && editor.value.transcript && (
+            <details>
+              <summary>{t.transcript}</summary>
+              <p>{editor.value.transcript}</p>
+            </details>
+          )}
         </div>
-        <label>
-          {t.date}
-          <input
-            required
-            type="date"
-            value={value.date}
-            onChange={(e) => setValue({ ...value, date: e.target.value })}
-          />
-        </label>
-        {editor.kind === "draft" && editor.value.transcript && (
-          <details>
-            <summary>{t.transcript}</summary>
-            <p>{editor.value.transcript}</p>
-          </details>
-        )}
         <div className="dialog-actions">
           <button
             type="button"
@@ -1337,7 +1353,6 @@ function CatalogEditor({
             <CategoryLimit
               item={item}
               defaultCurrency={defaultCurrency}
-              currencies={currencies}
               lang={lang}
               t={t}
               busy={busy}
@@ -1506,6 +1521,7 @@ function Preferences({
           </select>
         </label>
       </div>
+      <p className="hint">{t.currencyHint}</p>
       <fieldset className="input-mode">
         <legend>{t.inputMode}</legend>
         <label>

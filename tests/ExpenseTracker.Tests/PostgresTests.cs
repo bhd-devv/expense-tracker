@@ -4,6 +4,7 @@ using ExpenseTracker.Api.Features.Auth;
 using ExpenseTracker.Api.Features.Catalogs;
 using ExpenseTracker.Api.Features.Expenses;
 using ExpenseTracker.Api.Features.Users;
+using ExpenseTracker.Api.Features.Savings;
 using ExpenseTracker.Api.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -24,8 +25,82 @@ public sealed class PostgresFactAttribute : FactAttribute
 
 public sealed class PostgresTests
 {
+
     [PostgresFact]
-    public async Task CategoryLimitsUseLocalMonthAndCurrencyAndTrackEditsDeletesAndOlderClients()
+    public async Task SavingsAreSharedExactIdempotentAndIsolatedFromExpensesAndOtherOwners()
+    {
+        await using var factory = await Factory();
+        var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
+        using var browser = await Browser(factory, telegramId);
+        using var stranger = await Browser(factory, telegramId + 1);
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        var reportBefore = await browser.GetStringAsync("/api/reports");
+        var create = new CreateSavingsRequest(Guid.NewGuid(), "Vacation", "USD");
+        var created = await browser.PostAsJsonAsync("/api/savings", create);
+        created.EnsureSuccessStatusCode();
+        var account = await created.Content.ReadFromJsonAsync<SavingsAccountDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("0", account.Balance);
+        Assert.Equal(account, await (await browser.PostAsJsonAsync("/api/savings", create)).Content.ReadFromJsonAsync<SavingsAccountDto>());
+        Assert.Equal(HttpStatusCode.Conflict, (await browser.PostAsJsonAsync("/api/savings", create with { Name = "Changed" })).StatusCode);
+        var path = $"/api/savings/{account.Id}/entries";
+        var input = new SavingsEntryRequest(Guid.NewGuid(), "deposit", "0.10", new(2026, 11, 2), "Synthetic deposit");
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.PostAsJsonAsync(path, input)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync(path)).StatusCode);
+        var duplicate = await Task.WhenAll(browser.PostAsJsonAsync(path, input), browser.PostAsJsonAsync(path, input));
+        foreach (var response in duplicate) response.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await browser.PostAsJsonAsync(path, input with { Amount = "1" })).StatusCode);
+        foreach (var invalid in new SavingsEntryRequest[]
+        {
+            input with { RequestId = Guid.NewGuid(), Amount = "0" },
+            input with { RequestId = Guid.NewGuid(), Amount = "-1" },
+            input with { RequestId = Guid.NewGuid(), Amount = "0.001" },
+            input with { RequestId = Guid.NewGuid(), Kind = "other" },
+            input with { RequestId = Guid.NewGuid(), Date = default },
+            input with { RequestId = Guid.Empty }
+        })
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PostAsJsonAsync(path, invalid)).StatusCode);
+        var internalPath = $"/internal/bot/actor/savings/{account.Id}/entries";
+        (await bot.PostAsJsonAsync(internalPath, input with { RequestId = Guid.NewGuid(), Amount = "0.20" })).EnsureSuccessStatusCode();
+        var current = await browser.GetFromJsonAsync<SavingsEntryPage>(path) ?? throw new InvalidOperationException();
+        Assert.Equal("0.3", current.Account.Balance);
+        Assert.Equal("0.3", current.Account.Added);
+        Assert.Equal(2, current.Items.Count);
+        // Two spenders see the same initial balance. Only one can withdraw 0.20.
+        var spending = input with { RequestId = Guid.NewGuid(), Kind = "withdrawal", Amount = "0.20" };
+        var concurrent = await Task.WhenAll(browser.PostAsJsonAsync(path, spending),
+            bot.PostAsJsonAsync(internalPath, spending with { RequestId = Guid.NewGuid() }));
+        Assert.Single(concurrent.Where(x => x.StatusCode == HttpStatusCode.OK));
+        Assert.Single(concurrent.Where(x => x.StatusCode == HttpStatusCode.UnprocessableEntity));
+        current = await browser.GetFromJsonAsync<SavingsEntryPage>(path) ?? throw new InvalidOperationException();
+        Assert.Equal("0.1", current.Account.Balance);
+        Assert.Equal("0.2", current.Account.Spent);
+        Assert.Equal("UAH", current.Account.Currency);
+        Assert.Equal(3, current.Items.Count);
+        // Retrying the original deposit after subsequent spending must not add money.
+        (await browser.PostAsJsonAsync(path, input)).EnsureSuccessStatusCode();
+        Assert.Equal("0.1", (await bot.GetFromJsonAsync<SavingsEntryPage>(internalPath))?.Account.Balance);
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme,
+            profile.TimeZone, "EUR", profile.AiConsent, profile.Version))).EnsureSuccessStatusCode();
+        Assert.Equal("EUR", (await browser.GetFromJsonAsync<SavingsEntryPage>(path))?.Account.Currency);
+        Assert.Equal(reportBefore, await browser.GetStringAsync("/api/reports"));
+        Assert.Empty((await stranger.GetFromJsonAsync<SavingsAccountsDto>("/api/savings"))?.Items ?? throw new InvalidOperationException());
+        for (var i = 0; i < 20; i++)
+            (await browser.PostAsJsonAsync(path, input with { RequestId = Guid.NewGuid(), Amount = "1", Date = new(2026, 10, 1) })).EnsureSuccessStatusCode();
+        current = await browser.GetFromJsonAsync<SavingsEntryPage>(path) ?? throw new InvalidOperationException();
+        Assert.Equal(20, current.Items.Count);
+        Assert.True(current.HasMore);
+        var next = await browser.GetFromJsonAsync<SavingsEntryPage>(path + "?page=1") ?? throw new InvalidOperationException();
+        Assert.Equal(3, next.Items.Count);
+        Assert.False(next.HasMore);
+        Assert.Empty(current.Items.Select(x => x.Id).Intersect(next.Items.Select(x => x.Id)));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.GetAsync(path + "?page=-1")).StatusCode);
+    }
+
+    [PostgresFact]
+    public async Task CategoryLimitsUseLocalMonthAndTrackEditsDeletesAndOlderClients()
     {
         var clock = new Clock { Now = new(2026, 11, 30, 22, 30, 0, TimeSpan.Zero) };
         await using var factory = await Factory(services => services.AddSingleton<TimeProvider>(clock));
@@ -50,8 +125,7 @@ public sealed class PostgresTests
         foreach (var invalid in new CategoryLimitRequest[]
         {
             new("0", "UAH", category.Version), new("-1", "UAH", category.Version),
-            new("0.001", "UAH", category.Version), new("10.5", "JPY", category.Version),
-            new("100", "BTC", category.Version), new(null, "UAH", category.Version)
+            new("0.001", "UAH", category.Version), new("10.001", "JPY", category.Version), new(null, "UAH", category.Version)
         })
             Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PutAsJsonAsync(path, invalid)).StatusCode);
 
@@ -80,20 +154,20 @@ public sealed class PostgresTests
         var pendingDraft = await pending.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
         (await browser.PutAsJsonAsync($"/api/drafts/{pendingDraft.Id}",
             new DraftEditRequest("5000", "UAH", "Pending", category.Id, new(2026, 12, 1), pendingDraft.Version))).EnsureSuccessStatusCode();
-        Assert.Equal("40", (await Current()).Spent);
-        Assert.Equal(40m, (await Current()).UsedPercent);
+        Assert.Equal("940", (await Current()).Spent);
+        Assert.Equal(940m, (await Current()).UsedPercent);
         var last = await Save("85", "UAH", category.Id, new(2026, 12, 31));
         limit = await Current();
-        Assert.Equal("125", limit.Spent);
-        Assert.Equal(125m, limit.UsedPercent);
+        Assert.Equal("1025", limit.Spent);
+        Assert.Equal(1025m, limit.UsedPercent);
         Assert.True(limit.Exceeded);
         (await browser.PutAsJsonAsync($"/api/expenses/{last.Id}", new ExpenseInput("70", "UAH", category.Id,
             last.Description, last.Date, last.Version))).EnsureSuccessStatusCode();
-        Assert.Equal("110", (await Current()).Spent);
+        Assert.Equal("1010", (await Current()).Spent);
         (await browser.DeleteAsync($"/api/expenses/{first.Id}?version={first.Version}")).EnsureSuccessStatusCode();
         limit = await Current();
-        Assert.Equal("70", limit.Spent);
-        Assert.False(limit.Exceeded);
+        Assert.Equal("970", limit.Spent);
+        Assert.True(limit.Exceeded);
 
         // An older rename/icon client omits all budget fields and must preserve the limit.
         response = await browser.PutAsJsonAsync($"/api/categories/{category.Id}",
@@ -104,7 +178,7 @@ public sealed class PostgresTests
         var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
         (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme,
             profile.TimeZone, "USD", profile.AiConsent, profile.Version))).EnsureSuccessStatusCode();
-        Assert.Equal("UAH", (await Current()).Currency);
+        Assert.Equal("USD", (await Current()).Currency);
         using var bot = factory.CreateClient();
         bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
         bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
@@ -112,14 +186,14 @@ public sealed class PostgresTests
             new CategoryLimitRequest("1000", "USD", category.Version));
         response.EnsureSuccessStatusCode();
         category = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
-        Assert.Equal("900", (await Current()).Spent);
-        Assert.Equal(90m, (await Current()).UsedPercent);
+        Assert.Equal("970", (await Current()).Spent);
+        Assert.Equal(97m, (await Current()).UsedPercent);
         clock.Now = new(2026, 12, 31, 22, 30, 0, TimeSpan.Zero);
         using var january = await Browser(factory, telegramId, clock.Now);
         var nextCatalog = await january.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         limit = nextCatalog.Categories.Single(x => x.Id == category.Id).Limit ?? throw new InvalidOperationException();
         Assert.Equal(new DateOnly(2027, 1, 1), limit.From);
-        Assert.Equal("0", limit.Spent);
+        Assert.Equal("5", limit.Spent);
         response = await january.PutAsJsonAsync(path, new CategoryLimitRequest(null, null, category.Version));
         response.EnsureSuccessStatusCode();
         Assert.Null((await response.Content.ReadFromJsonAsync<CatalogItemDto>())?.Limit);
@@ -319,43 +393,86 @@ public sealed class PostgresTests
     }
 
     [PostgresFact]
-    public async Task ExpenseAndDraftCurrenciesSurvivePreferenceChanges()
+    public async Task ProfileCurrencyRelabelsDraftsExpensesReportsAndLimitsWithoutChangingAmounts()
     {
         await using var factory = await Factory();
-        using var browser = await Browser(factory, Random.Shared.NextInt64(100_000_000, 900_000_000));
+        var telegramId = Random.Shared.NextInt64(100_000_000, 900_000_000);
+        using var browser = await Browser(factory, telegramId);
         var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var category = catalog.Categories[0];
+        (await browser.PutAsJsonAsync($"/api/categories/{category.Id}/limit",
+            new CategoryLimitRequest("100.50", "EUR", category.Version))).EnsureSuccessStatusCode();
+        var input = new CreateDraftRequest(Guid.NewGuid(), "Lunch", "manual");
+        var created = await browser.PostAsJsonAsync("/api/drafts", input);
+        created.EnsureSuccessStatusCode();
+        var draft = await created.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        var edited = await browser.PutAsJsonAsync($"/api/drafts/{draft.Id}",
+            new DraftEditRequest("12.50", "EUR", "Lunch", category.Id, draft.Date, draft.Version));
+        edited.EnsureSuccessStatusCode();
+        draft = await edited.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("UAH", draft.Currency);
+        var accountInput = new CreateSavingsRequest(Guid.NewGuid(), "Relabel sample", "EUR");
+        var accountResponse = await browser.PostAsJsonAsync("/api/savings", accountInput);
+        accountResponse.EnsureSuccessStatusCode();
+        var account = await accountResponse.Content.ReadFromJsonAsync<SavingsAccountDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("UAH", account.Currency);
+        var savingsPath = $"/api/savings/{account.Id}/entries";
+        (await browser.PostAsJsonAsync(savingsPath,
+            new SavingsEntryRequest(Guid.NewGuid(), "deposit", "12.50", draft.Date, "Relabel sample"))).EnsureSuccessStatusCode();
         var updated = await browser.PutAsJsonAsync("/api/profile",
-            new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "EUR", false, profile.Version));
+            new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "JPY", false, profile.Version));
         updated.EnsureSuccessStatusCode();
         profile = await updated.Content.ReadFromJsonAsync<ProfileDto>() ?? throw new InvalidOperationException();
-        var input = new CreateDraftRequest(Guid.NewGuid(), "Lunch 12.50");
-        var draftResponse = await browser.PostAsJsonAsync("/api/drafts", input);
-        draftResponse.EnsureSuccessStatusCode();
-        var draft = await draftResponse.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
-        Assert.Equal("EUR", draft.Currency);
-        (await browser.PutAsJsonAsync("/api/profile",
-            new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "USD", false, profile.Version))).EnsureSuccessStatusCode();
-        var replay = await (await browser.PostAsJsonAsync("/api/drafts", input)).Content.ReadFromJsonAsync<DraftDto>();
-        Assert.Equal("EUR", replay!.Currency);
-        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        var confirmation = new ExpenseInput("12.50", draft.Currency, catalog.Categories[0].Id, "Lunch", draft.Date, draft.Version);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity,
-            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "invalid" })).StatusCode);
-        Assert.Equal(HttpStatusCode.UnprocessableEntity,
-            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "JPY" })).StatusCode);
+        var replay = await (await browser.PostAsJsonAsync("/api/drafts", input)).Content.ReadFromJsonAsync<DraftDto>()
+            ?? throw new InvalidOperationException();
+        Assert.Equal("JPY", replay.Currency);
+        Assert.Equal("12.5", replay.Amount);
+        Assert.Equal(draft.Version, replay.Version);
+        // An already open client sends its old currency. The backend uses the profile.
+        var confirmation = new ExpenseInput("12.50", "EUR", category.Id, "Lunch", draft.Date, draft.Version);
         var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation);
         saved.EnsureSuccessStatusCode();
         var expense = await saved.Content.ReadFromJsonAsync<ExpenseDto>() ?? throw new InvalidOperationException();
-        Assert.Equal("EUR", expense.Currency);
+        Assert.Equal("JPY", expense.Currency);
         Assert.Equal("12.5", expense.Amount);
+        (await browser.PutAsJsonAsync("/api/profile",
+            new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "USD", false, profile.Version))).EnsureSuccessStatusCode();
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        var shared = await bot.GetFromJsonAsync<ExpenseDto>($"/internal/bot/actor/expenses/{expense.Id}")
+            ?? throw new InvalidOperationException();
+        Assert.Equal("USD", shared.Currency);
+        Assert.Equal(expense.Amount, shared.Amount);
+        Assert.Equal(expense.Version, shared.Version);
+        (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "JPY" })).EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Conflict,
-            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Currency = "USD" })).StatusCode);
-        var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}",
-            confirmation with { Currency = "JPY", Amount = "1250", Version = expense.Version });
-        edited.EnsureSuccessStatusCode();
+            (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation with { Amount = "13" })).StatusCode);
         var report = await browser.GetFromJsonAsync<ReportDto>("/api/reports") ?? throw new InvalidOperationException();
-        Assert.Equal("JPY", Assert.Single(report.Totals).Currency);
-        Assert.Equal("1250", Assert.Single(report.Totals).Amount);
+        Assert.Equal("USD", Assert.Single(report.Totals).Currency);
+        Assert.Equal("12.5", Assert.Single(report.Totals).Amount);
+        Assert.Single((await browser.GetFromJsonAsync<ExpensePage>("/api/expenses"))?.Items ?? []);
+        catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var limit = catalog.Categories.Single(x => x.Id == category.Id).Limit ?? throw new InvalidOperationException();
+        Assert.Equal("USD", limit.Currency);
+        Assert.Equal("100.5", limit.Amount);
+        Assert.Equal("12.5", limit.Spent);
+        var journal = await bot.GetFromJsonAsync<SavingsEntryPage>($"/internal/bot/actor/savings/{account.Id}/entries")
+            ?? throw new InvalidOperationException();
+        Assert.Equal("USD", journal.Account.Currency);
+        Assert.Equal("12.5", journal.Account.Balance);
+        Assert.Equal("12.5", Assert.Single(journal.Items).Amount);
+        // A creation retry keeps the account ID after a currency preference change.
+        var repeatedAccount = await browser.PostAsJsonAsync("/api/savings", accountInput);
+        repeatedAccount.EnsureSuccessStatusCode();
+        Assert.Equal(account.Id, (await repeatedAccount.Content.ReadFromJsonAsync<SavingsAccountDto>())?.Id);
+        // Relabeling does not rewrite persisted amounts or historical currency metadata.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Database>();
+        var stored = await db.Expenses.AsNoTracking().SingleAsync(x => x.Id == expense.Id);
+        Assert.Equal(12.50m, stored.Amount);
+        Assert.Equal("JPY", stored.Currency);
     }
 
     [PostgresFact]
@@ -460,9 +577,8 @@ public sealed class PostgresTests
             Assert.InRange(expense.Date, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31));
         });
         var report = await browser.GetFromJsonAsync<ReportDto>("/api/reports?from=2026-10-01&to=2026-10-31") ?? throw new InvalidOperationException();
-        Assert.Equal(64, report.Totals.Single(x => x.Currency == "UAH").Count);
-        Assert.Equal(3, report.Totals.Single(x => x.Currency == "USD").Count);
-        Assert.Equal(3, report.Totals.Single(x => x.Currency == "EUR").Count);
+        Assert.Equal("UAH", Assert.Single(report.Totals).Currency);
+        Assert.Equal(70, Assert.Single(report.Totals).Count);
         var expense = seeded[0];
         Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync($"/api/expenses/{expense.Id}")).StatusCode);
         var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}",
@@ -561,7 +677,7 @@ public sealed class PostgresTests
         var draft = await response.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
         Assert.Equal("ready", draft.Status);
         Assert.Equal("85.2", draft.Amount);
-        Assert.Equal("EUR", draft.Currency);
+        Assert.Equal(profile.Currency, draft.Currency);
         Assert.Equal(category, draft.CategoryId);
         Assert.Equal(new DateOnly(2026, 11, 1), draft.Date);
         (await browser.PostAsJsonAsync("/api/drafts", input)).EnsureSuccessStatusCode();

@@ -3,6 +3,8 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 028 — [Компактні екрани та валюта з налаштувань](../.agents/changelog/028-compact-layout-profile-currency.md)
+- 027 — [Накопичувальні рахунки з поповненнями й списаннями](../.agents/changelog/027-savings-accounts.md)
 - 026 — [Оновлений вигляд і плавний рух Mini App](../.agents/changelog/026-interface-polish.md)
 - 025 — [Місячні ліміти категорій і смужки використання](../.agents/changelog/025-category-monthly-limits.md)
 - 024 — [Редагування назви категорії безпосередньо в рядку](../.agents/changelog/024-inline-category-rename.md)

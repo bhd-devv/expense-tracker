@@ -74,7 +74,8 @@ public static class BotEndpoints
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({user.TelegramId})", ct);
             var state = await db.Conversations.SingleOrDefaultAsync(x => x.UserId == user.Id, ct);
             if ((state?.Version ?? 0) != input.Version) throw new ApiError("conflict", 409);
-            if (input.State.Length > 40 || input.Field?.Length > 40 || input.EntityId?.Length > 100) throw new ApiError("invalid_state");
+            var maxFieldLength = input.State.StartsWith("savings_", StringComparison.Ordinal) ? 2048 : 40;
+            if (input.State.Length > 40 || input.Field?.Length > maxFieldLength || input.EntityId?.Length > 100) throw new ApiError("invalid_state");
             if (state is null) { state = new Conversation { UserId = user.Id }; db.Add(state); }
             state.State = input.State;
             state.EntityId = input.EntityId;

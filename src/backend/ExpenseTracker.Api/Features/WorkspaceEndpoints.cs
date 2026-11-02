@@ -1,6 +1,7 @@
 using ExpenseTracker.Api.Features.Catalogs;
 using ExpenseTracker.Api.Features.Expenses;
 using ExpenseTracker.Api.Features.Users;
+using ExpenseTracker.Api.Features.Savings;
 using ExpenseTracker.Api.Infrastructure;
 
 namespace ExpenseTracker.Api.Features;
@@ -9,6 +10,14 @@ public static class WorkspaceEndpoints
 {
     public static void MapWorkspace(this RouteGroupBuilder group, string source)
     {
+        group.MapGet("/savings", async (HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
+            await savings.List(await users.Current(context, ct), ct));
+        group.MapPost("/savings", async (CreateSavingsRequest input, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
+            await savings.Create(await users.Current(context, ct), input, ct));
+        group.MapGet("/savings/{id:guid}/entries", async (Guid id, int? page, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
+            await savings.Entries(await users.Current(context, ct), id, page ?? 0, ct));
+        group.MapPost("/savings/{id:guid}/entries", async (Guid id, SavingsEntryRequest input, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
+            await savings.Add(await users.Current(context, ct), id, input, ct));
         group.MapGet("/profile", async (HttpContext context, UserService users, CancellationToken ct) =>
             UserService.View(await users.Current(context, ct)));
         group.MapPut("/profile", async (PreferencesRequest input, HttpContext context, UserService users, CancellationToken ct) =>
@@ -31,7 +40,10 @@ public static class WorkspaceEndpoints
             HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.List(await users.Current(context, ct), from, to, categoryId, page ?? 0, ct));
         group.MapGet("/expenses/{id:guid}", async (Guid id, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            ExpenseService.View(await expenses.Find(await users.Current(context, ct), id, ct)));
+        {
+            var user = await users.Current(context, ct);
+            return ExpenseService.View(await expenses.Find(user, id, ct), user);
+        });
         group.MapPut("/expenses/{id:guid}", async (Guid id, ExpenseInput input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.Edit(await users.Current(context, ct), id, input, ct));
         group.MapDelete("/expenses/{id:guid}", async (Guid id, int version, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
@@ -58,7 +70,10 @@ public static class WorkspaceEndpoints
             return await expenses.Create(user, requestId, "", source, audio, ct);
         }).DisableAntiforgery().RequireRateLimiting("ai");
         group.MapGet("/drafts/{id:guid}", async (Guid id, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            ExpenseService.ViewDraft(await expenses.FindDraft(await users.Current(context, ct), id, ct)));
+        {
+            var user = await users.Current(context, ct);
+            return ExpenseService.ViewDraft(await expenses.FindDraft(user, id, ct), user);
+        });
         group.MapPut("/drafts/{id:guid}", async (Guid id, DraftEditRequest input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.EditDraft(await users.Current(context, ct), id, input, ct));
         group.MapPost("/drafts/{id:guid}/confirm", async (Guid id, ExpenseInput input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>

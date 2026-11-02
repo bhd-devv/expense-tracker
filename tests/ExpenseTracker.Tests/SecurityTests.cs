@@ -49,11 +49,18 @@ public sealed class SecurityTests
     [InlineData("0", "UAH")]
     [InlineData("-2", "UAH")]
     [InlineData("1.001", "UAH")]
-    [InlineData("1.1", "JPY")]
+    [InlineData("1.001", "JPY")]
     [InlineData("1e3", "USD")]
     [InlineData("NaN", "EUR")]
     public void MoneyRejectsInvalidAmounts(string value, string currency) =>
         Assert.Throws<ApiError>(() => Rules.Amount(value, currency));
+
+    [Theory]
+    [InlineData("UAH")]
+    [InlineData("USD")]
+    [InlineData("JPY")]
+    public void CurrencyLabelsPreserveFractionalAmounts(string currency) =>
+        Assert.Equal(12.5m, Rules.Amount("12.50", currency));
 
     [Fact]
     public void TodayUsesUsersTimezone()

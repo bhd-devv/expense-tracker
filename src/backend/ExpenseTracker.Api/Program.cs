@@ -9,6 +9,7 @@ using ExpenseTracker.Api.Features.BotIntegration;
 using ExpenseTracker.Api.Features.Catalogs;
 using ExpenseTracker.Api.Features.Expenses;
 using ExpenseTracker.Api.Features.Users;
+using ExpenseTracker.Api.Features.Savings;
 using ExpenseTracker.Api.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -56,6 +57,7 @@ try
         .ValidateOnStart();
     builder.Services.AddScoped<UserService>();
     builder.Services.AddScoped<CatalogService>();
+    builder.Services.AddScoped<SavingsService>();
     builder.Services.AddScoped<ExpenseService>();
     builder.Services.AddScoped<DemoSeedService>();
     builder.Services.AddSingleton<TelegramBotIdentity>();

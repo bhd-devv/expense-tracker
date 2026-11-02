@@ -21,11 +21,11 @@ public sealed record DraftEditRequest(string? Amount, string Currency, string De
 
 public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter ai, ILogger<ExpenseService>? logger = null)
 {
-    public static ExpenseDto View(Expense x) => new(x.Id, Rules.Money(x.Amount), x.Currency, x.Description, x.Date,
+    public static ExpenseDto View(Expense x, User user) => new(x.Id, Rules.Money(x.Amount), user.Currency, x.Description, x.Date,
         x.CategoryId, x.Source, x.Version);
 
-    public static DraftDto ViewDraft(Draft x) => new(
-        x.Id, x.Status, x.Amount is { } amount ? Rules.Money(amount) : null, x.Currency, x.Description,
+    public static DraftDto ViewDraft(Draft x, User user) => new(
+        x.Id, x.Status, x.Amount is { } amount ? Rules.Money(amount) : null, user.Currency, x.Description,
         x.Transcript, x.Date, x.CategoryId, x.ErrorCode, x.Version, x.ExpenseId);
 
     public async Task<ExpensePage> List(User user, DateOnly? from, DateOnly? to, Guid? categoryId, int page, CancellationToken ct)
@@ -34,7 +34,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         var query = Filter(user.Id, from, to, categoryId);
         var items = await query.OrderByDescending(x => x.Date).ThenByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
             .Skip(page * 20).Take(21).ToListAsync(ct);
-        return new(items.Take(20).Select(View).ToArray(), page, items.Count > 20);
+        return new(items.Take(20).Select(x => View(x, user)).ToArray(), page, items.Count > 20);
     }
 
     private IQueryable<Expense> Filter(Guid userId, DateOnly? from, DateOnly? to, Guid? categoryId) =>
@@ -44,10 +44,10 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
     public async Task<ReportDto> Report(User user, DateOnly? from, DateOnly? to, Guid? categoryId, CancellationToken ct)
     {
         if (from > to) throw new ApiError("invalid_filter");
-        var rows = await Filter(user.Id, from, to, categoryId).GroupBy(x => new { x.Currency, x.CategoryId })
-            .Select(g => new { g.Key.Currency, g.Key.CategoryId, Amount = g.Sum(x => x.Amount), Count = g.Count() }).ToListAsync(ct);
-        return new(rows.GroupBy(x => x.Currency).Select(g => new ReportTotal(g.Key, Rules.Money(g.Sum(x => x.Amount)), g.Sum(x => x.Count))).ToArray(),
-            rows.OrderByDescending(x => x.Amount).Select(x => new ReportRow(x.Currency, x.CategoryId, Rules.Money(x.Amount), x.Count)).ToArray());
+        var rows = await Filter(user.Id, from, to, categoryId).GroupBy(x => x.CategoryId)
+            .Select(g => new { CategoryId = g.Key, Amount = g.Sum(x => x.Amount), Count = g.Count() }).ToListAsync(ct);
+        return new(rows.Count == 0 ? [] : [new ReportTotal(user.Currency, Rules.Money(rows.Sum(x => x.Amount)), rows.Sum(x => x.Count))],
+            rows.OrderByDescending(x => x.Amount).Select(x => new ReportRow(user.Currency, x.CategoryId, Rules.Money(x.Amount), x.Count)).ToArray());
     }
 
     public async Task<Expense> Find(User user, Guid id, CancellationToken ct) =>
@@ -74,7 +74,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             {
                 if (existing.InputHash != inputHash) throw new ApiError("idempotency_conflict", 409);
                 logger?.LogInformation("Draft creation replayed draftId={DraftId} userId={UserId}", existing.Id, user.Id);
-                return ViewDraft(existing);
+                return ViewDraft(existing, user);
             }
             draft = new Draft
             {
@@ -96,15 +96,13 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         }
         logger?.LogInformation("Draft created draftId={DraftId} userId={UserId} source={Source} inputKind={InputKind}",
             draft.Id, user.Id, source, draft.InputKind);
-        if (manual) return ViewDraft(draft);
+        if (manual) return ViewDraft(draft, user);
         try
         {
             if (!user.AiConsent) throw new ApiError("ai_consent_required");
             var categories = await db.Categories.Where(x => x.UserId == user.Id && !x.Archived).ToArrayAsync(ct);
             var currency = draft.Currency;
             var result = await ai.Parse(text, audio, categories, currency, draft.Date, ct);
-            currency = result.Currency ?? currency;
-            if (!Rules.Currencies.Contains(currency)) throw new ApiError("invalid_currency");
             draft.Currency = currency;
             draft.Transcript = audio is null ? text : Rules.Text(result.Transcript, 2000);
             draft.Description = string.IsNullOrWhiteSpace(result.Description) ? draft.Transcript : Rules.Text(result.Description);
@@ -138,7 +136,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
             db.Entry(draft).State = EntityState.Detached;
         }
         logger?.LogInformation("Draft processing finished draftId={DraftId}", draft.Id);
-        return ViewDraft(await FindDraft(user, draft.Id, ct));
+        return ViewDraft(await FindDraft(user, draft.Id, ct), user);
     }
 
     public async Task<ExpenseDto> Confirm(User user, Guid id, ExpenseInput input, CancellationToken ct)
@@ -149,11 +147,11 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         if (draft.ExpenseId is { } savedId)
         {
             var saved = await Find(user, savedId, ct);
-            if (Rules.Amount(input.Amount, saved.Currency) != saved.Amount || input.CategoryId != saved.CategoryId
-                || input.Currency != saved.Currency || Rules.Text(input.Description) != saved.Description || input.Date != saved.Date)
+            if (Rules.Amount(input.Amount, user.Currency) != saved.Amount || input.CategoryId != saved.CategoryId
+                || Rules.Text(input.Description) != saved.Description || input.Date != saved.Date)
                 throw new ApiError("idempotency_conflict", 409);
             logger?.LogInformation("Expense confirmation replayed expenseId={ExpenseId} userId={UserId}", saved.Id, user.Id);
-            return View(saved);
+            return View(saved, user);
         }
         if (draft.Status is "cancelled" or "processing" || draft.ExpiresAt <= clock.GetUtcNow()) throw new ApiError("draft_expired", 409);
         if (input.Version != draft.Version) throw new ApiError("conflict", 409);
@@ -169,7 +167,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         logger?.LogInformation("Expense saved expenseId={ExpenseId} userId={UserId} source={Source}", expense.Id, user.Id, draft.Source);
-        return View(expense);
+        return View(expense, user);
     }
 
     internal async Task Apply(User user, Expense expense, ExpenseInput input, CancellationToken ct)
@@ -177,9 +175,8 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         var category = await db.Categories.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == input.CategoryId, ct) ?? throw new ApiError("invalid_category");
         if (category.Archived && expense.CategoryId != category.Id)
             throw new ApiError("archived_reference");
-        if (!Rules.Currencies.Contains(input.Currency)) throw new ApiError("invalid_currency");
-        expense.Amount = Rules.Amount(input.Amount, input.Currency);
-        expense.Currency = input.Currency;
+        expense.Amount = Rules.Amount(input.Amount, user.Currency);
+        expense.Currency = user.Currency;
         expense.CategoryId = category.Id;
         expense.Description = Rules.Text(input.Description);
         if (input.Date == default) throw new ApiError("invalid_date");
@@ -196,7 +193,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         logger?.LogInformation("Expense edited expenseId={ExpenseId} userId={UserId} version={Version}", expense.Id, user.Id, expense.Version);
-        return View(expense);
+        return View(expense, user);
     }
 
     public async Task Delete(User user, Guid id, int version, CancellationToken ct)
@@ -225,9 +222,8 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         if (draft.Status is "cancelled" or "saved" or "processing" || draft.ExpiresAt <= clock.GetUtcNow()) throw new ApiError("draft_expired", 409);
         if (input.Version != draft.Version) throw new ApiError("conflict", 409);
         if (input.CategoryId is { } categoryId && !await db.Categories.AnyAsync(x => x.UserId == user.Id && x.Id == categoryId && !x.Archived, ct)) throw new ApiError("invalid_category");
-        if (!Rules.Currencies.Contains(input.Currency)) throw new ApiError("invalid_currency");
-        draft.Currency = input.Currency;
-        draft.Amount = string.IsNullOrWhiteSpace(input.Amount) ? null : Rules.Amount(input.Amount, input.Currency);
+        draft.Currency = user.Currency;
+        draft.Amount = string.IsNullOrWhiteSpace(input.Amount) ? null : Rules.Amount(input.Amount, user.Currency);
         draft.Description = string.IsNullOrEmpty(input.Description) ? "" : Rules.Text(input.Description);
         if (input.Date == default) throw new ApiError("invalid_date");
         draft.Date = input.Date;
@@ -237,7 +233,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         logger?.LogInformation("Draft edited draftId={DraftId} userId={UserId} version={Version}", draft.Id, user.Id, draft.Version);
-        return ViewDraft(draft);
+        return ViewDraft(draft, user);
     }
 
     public async Task<DraftDto> Cancel(User user, Guid id, int version, CancellationToken ct)
@@ -245,7 +241,7 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         await using var transaction = await db.LockUser(user, ct);
         var draft = await FindDraft(user, id, ct);
         if (draft.ExpenseId is not null) throw new ApiError("already_saved", 409);
-        if (draft.Status == "cancelled") return ViewDraft(draft);
+        if (draft.Status == "cancelled") return ViewDraft(draft, user);
         if (draft.Version != version) throw new ApiError("conflict", 409);
         draft.Status = "cancelled";
         ClearContent(draft);
@@ -253,6 +249,6 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         logger?.LogInformation("Draft cancelled draftId={DraftId} userId={UserId}", draft.Id, user.Id);
-        return ViewDraft(draft);
+        return ViewDraft(draft, user);
     }
 }

@@ -6,6 +6,16 @@
 
 ## Активна робота
 
+[Компактні екрани й валюта профілю](tasks/compact-layout-currency-2026-11-02/README.md)
+реалізовані локально: спільні компактні відступи, редактор із видимими діями,
+єдине позначення витрат, лімітів і накопичень без конвертації. Документація
+та diff перевірені; runtime/браузер/Telegram/PostgreSQL/Coolify не запускалися.
+
+[Накопичувальні рахунки](tasks/savings-accounts-2026-11-02/README.md) додані
+локально в Mini App, backend і бот: створення, залишок, поповнення/списання
+та журнал. Additive migration `AddSavingsAccounts` не застосована. Тести
+додані, build/typecheck/browser/PostgreSQL/Telegram/Coolify не запускалися.
+
 Локальне [візуальне оновлення Mini App](tasks/interface-polish-2026-11-02/README.md)
 завершено: спільні visual/motion tokens, оновлені поверхні й контролі,
 плавна поява вкладок/діалогів/списків і progress, reduced motion.

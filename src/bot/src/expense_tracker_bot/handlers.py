@@ -20,6 +20,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from . import savings
 from .api import Api, ApiError
 from .copy import COPY, CURRENCIES, category
 from .models import (
@@ -37,6 +38,7 @@ from .models import (
 from .observability import log_failure
 
 router = Router()
+router.include_router(savings.router)
 logger = logging.getLogger(__name__)
 
 
@@ -73,6 +75,7 @@ def menu(t: dict[str, str]) -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text=t["add"]), KeyboardButton(text=t["expenses"])],
             [KeyboardButton(text=t["reports"]), KeyboardButton(text=t["categories"])],
+            [KeyboardButton(text=t["savings"])],
             [KeyboardButton(text=t["settings"]), KeyboardButton(text=t["app"])],
         ],
         resize_keyboard=True,
@@ -142,7 +145,7 @@ async def show_record(
         )
     if isinstance(record, DraftDto) and record.transcript:
         lines.append(record.transcript)
-    fields: tuple[str, ...] = ("amount", "currency", "description", "date", "categoryId")
+    fields: tuple[str, ...] = ("amount", "description", "date", "categoryId")
     if isinstance(record, DraftDto) and record.errorCode == "date_needs_clarification":
         fields = ("date",)
     rows = [
@@ -291,19 +294,29 @@ async def choose_limit_currency(
     item = await find_item(api, conversation.entityId or "")
     if str(item.version) != conversation.field:
         raise ApiError("conflict", 409)
-    rows = [
-        button(t, currency, "limitcurrency", currency, version=conversation.version)
-        for currency in CURRENCIES
-    ]
+    await request_limit_amount(message, api, t, item)
+
+
+async def request_limit_amount(
+    message: Message, api: Api, t: dict[str, str], item: CatalogItemDto
+) -> None:
+    profile, _ = await profile_context(api)
+    current = await state(api, "category_limit", str(item.id), f"{item.version}.{profile.currency}")
+    rows = []
     if item.limit:
         rows.append(
             button(
                 t, "removeCategoryLimit", "limitclear", compact(item.id), "categories", item.version
             )
         )
-    rows.append(button(t, "cancel", "limitcancel", version=conversation.version))
+    rows.append(button(t, "cancel", "limitcancel", version=current.version))
     await message.answer(
-        category(item, t) + "\n" + category_limit_text(item, t) + "\n\n" + t["limitCurrency"],
+        category(item, t)
+        + "\n"
+        + category_limit_text(item, t)
+        + "\n\n"
+        + t["limitAmount"]
+        + f" · {profile.currency}",
         reply_markup=keyboard(rows),
     )
 
@@ -405,7 +418,7 @@ async def input_value(
     entity = conversation.entityId or ""
     if conversation.state == "record":
         kind, name, expected = field.split(".")
-        if name not in ("amount", "currency", "description", "date", "categoryId"):
+        if name not in ("amount", "description", "date", "categoryId"):
             raise ApiError("conflict", 409)
         path = entity_path(kind, entity)
         record = await get_record(api, kind, entity)
@@ -547,6 +560,7 @@ async def handle_message(
                     "expenses",
                     "reports",
                     "categories",
+                    "savings",
                     "settings",
                     "app",
                 )
@@ -560,6 +574,8 @@ async def handle_message(
             await state(api, selected if selected in ("expenses", "reports") else "idle")
             if selected in ("expenses", "reports"):
                 await browse(message, api, t, selected)
+            elif selected == "savings":
+                await savings.show_accounts(message, api, t)
             elif selected == "categories":
                 await catalogs(message, api, t)
             elif selected == "settings":
@@ -586,6 +602,9 @@ async def handle_message(
                     await message.answer(t["openAppPrompt"], reply_markup=app_keyboard(t, app_url))
             return
         conversation = await api.get("/conversation", ConversationDto)
+        if conversation.state.startswith("savings_"):
+            await savings.input_value(message, api, conversation, text, t)
+            return
         if conversation.state == "category_icon":
             await category_icons(message, api, t, conversation)
             return
@@ -776,7 +795,7 @@ async def handle_callback(
                 await browse(message, api, t)
             elif data.action == "field":
                 name = data.field.split(".")[1]
-                if name not in ("amount", "currency", "description", "date", "categoryId"):
+                if name not in ("amount", "description", "date", "categoryId"):
                     raise ApiError("conflict", 409)
                 current = await state(api, "record", data.entity, f"{kind}.{name}.{data.version}")
                 if name == "categoryId":
@@ -799,18 +818,6 @@ async def handle_callback(
                                 if not item.archived
                             ],
                             1,
-                        ),
-                    )
-                elif name == "currency":
-                    await message.answer(
-                        t["currency"],
-                        reply_markup=keyboard(
-                            [
-                                button(
-                                    t, currency, "select", currency, "record", int(current.version)
-                                )
-                                for currency in CURRENCIES
-                            ]
                         ),
                     )
                 else:
@@ -886,13 +893,13 @@ async def handle_callback(
             if int(conversation.version) != data.version or conversation.state != data.field:
                 raise ApiError("conflict", 409)
             if data.field == "record":
+                if (conversation.field or "").split(".")[1] != "categoryId":
+                    raise ApiError("conflict", 409)
                 await input_value(
                     message,
                     api,
                     conversation,
-                    data.entity
-                    if (conversation.field or "").split(".")[1] == "currency"
-                    else str(UUID(data.entity)),
+                    str(UUID(data.entity)),
                     t,
                     app_url,
                 )
@@ -973,17 +980,7 @@ async def handle_callback(
                 item = await find_item(api, conversation.entityId or "")
                 if str(item.version) != conversation.field:
                     raise ApiError("conflict", 409)
-                current = await state(
-                    api, "category_limit", str(item.id), f"{item.version}.{data.entity}"
-                )
-                await message.answer(
-                    t["limitAmount"] + f" · {data.entity}\n" + t["limitCurrencyHint"],
-                    reply_markup=keyboard(
-                        [
-                            button(t, "cancel", "limitcancel", version=current.version),
-                        ]
-                    ),
-                )
+                await request_limit_amount(message, api, t, item)
         elif data.action in ("catalog", "rename", "icon", "catlimit", "limitclear"):
             if data.field != "categories":
                 raise ApiError("conflict", 409)
@@ -1002,10 +999,7 @@ async def handle_callback(
                     reply_markup=keyboard(rows),
                 )
             elif data.action == "catlimit":
-                current = await state(
-                    api, "category_limit_currency", str(item.id), str(item.version)
-                )
-                await choose_limit_currency(message, api, t, current)
+                await request_limit_amount(message, api, t, item)
             elif data.action == "limitclear":
                 await api.mutate(
                     "PUT",

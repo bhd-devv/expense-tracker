@@ -7,7 +7,6 @@ import { categoryName, money, type Copy, type Language } from "@/lib/i18n";
 export default function CategoryLimit({
   item,
   defaultCurrency,
-  currencies,
   lang,
   t,
   busy,
@@ -16,7 +15,6 @@ export default function CategoryLimit({
 }: {
   item: Item;
   defaultCurrency: string;
-  currencies: readonly string[];
   lang: Language;
   t: Copy;
   busy: boolean;
@@ -25,7 +23,6 @@ export default function CategoryLimit({
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState(defaultCurrency);
   const [version, setVersion] = useState(item.version);
   const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -86,7 +83,6 @@ export default function CategoryLimit({
           aria-label={`${limit ? t.editLimit : t.setLimit}: ${categoryName(item, t)}`}
           onClick={() => {
             setAmount(limit?.amount ?? "");
-            setCurrency(limit?.currency ?? defaultCurrency);
             setVersion(item.version);
             setOpen(true);
           }}
@@ -119,7 +115,7 @@ export default function CategoryLimit({
           className="category-limit-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void save(amount.replace(",", "."), currency);
+            void save(amount.replace(",", "."), defaultCurrency);
           }}
           onKeyDown={(event) => {
             if (event.key === "Escape" && !busy) {
@@ -130,7 +126,7 @@ export default function CategoryLimit({
         >
           <div className="category-limit-fields">
             <label>
-              {t.amount}
+              {t.amount} · {defaultCurrency}
               <input
                 ref={input}
                 inputMode="decimal"
@@ -141,20 +137,7 @@ export default function CategoryLimit({
                 onChange={(event) => setAmount(event.target.value)}
               />
             </label>
-            <label>
-              {t.currency}
-              <select
-                value={currency}
-                disabled={busy}
-                onChange={(event) => setCurrency(event.target.value)}
-              >
-                {currencies.map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            </label>
           </div>
-          <p className="hint">{t.limitCurrencyHint}</p>
           <div className="dialog-actions">
             <button className="button primary" disabled={busy}>
               {t.save}

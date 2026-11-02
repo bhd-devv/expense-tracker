@@ -16,12 +16,12 @@ public sealed class CatalogService(Database db, TimeProvider clock, ILogger<Cata
         var categories = await db.Categories.AsNoTracking().Where(x => x.UserId == user.Id).OrderBy(x => x.Name).ToArrayAsync(ct);
         var (from, to) = Month(user);
         if (!categories.Any(x => x.MonthlyLimit is not null))
-            return new(categories.Select(x => View(x, from, to)).ToArray());
+            return new(categories.Select(x => View(x, user.Currency, from, to)).ToArray());
         var totals = await db.Expenses.AsNoTracking().Where(x => x.UserId == user.Id && x.Date >= from && x.Date <= to)
-            .GroupBy(x => new { x.CategoryId, x.Currency })
-            .Select(g => new { g.Key.CategoryId, g.Key.Currency, Spent = g.Sum(x => x.Amount) })
-            .ToDictionaryAsync(x => (x.CategoryId, x.Currency), x => x.Spent, ct);
-        return new(categories.Select(x => View(x, from, to, totals.GetValueOrDefault((x.Id, x.LimitCurrency ?? "")))).ToArray());
+            .GroupBy(x => x.CategoryId)
+            .Select(g => new { CategoryId = g.Key, Spent = g.Sum(x => x.Amount) })
+            .ToDictionaryAsync(x => x.CategoryId, x => x.Spent, ct);
+        return new(categories.Select(x => View(x, user.Currency, from, to, totals.GetValueOrDefault(x.Id))).ToArray());
     }
 
     private (DateOnly From, DateOnly To) Month(User user)
@@ -31,9 +31,9 @@ public sealed class CatalogService(Database db, TimeProvider clock, ILogger<Cata
         return (from, from.AddMonths(1).AddDays(-1));
     }
 
-    private static CatalogItemDto View(Category category, DateOnly from, DateOnly to, decimal spent = 0) => new(
+    private static CatalogItemDto View(Category category, string currency, DateOnly from, DateOnly to, decimal spent = 0) => new(
         category.Id, category.Name, category.Code, category.Archived, category.Version, category.Icon ?? CategoryIcons.Default(category.Code),
-        category.MonthlyLimit is { } amount && category.LimitCurrency is { } currency
+        category.MonthlyLimit is { } amount
             ? new(Rules.Money(amount), currency, Rules.Money(spent), decimal.Round(spent / amount * 100, 1, MidpointRounding.AwayFromZero), spent > amount, from, to)
             : null);
 
@@ -41,9 +41,9 @@ public sealed class CatalogService(Database db, TimeProvider clock, ILogger<Cata
     {
         var (from, to) = Month(user);
         var spent = category.MonthlyLimit is null ? 0 : await db.Expenses.AsNoTracking()
-            .Where(x => x.UserId == user.Id && x.CategoryId == category.Id && x.Currency == category.LimitCurrency
+            .Where(x => x.UserId == user.Id && x.CategoryId == category.Id
                 && x.Date >= from && x.Date <= to).SumAsync(x => x.Amount, ct);
-        return View(category, from, to, spent);
+        return View(category, user.Currency, from, to, spent);
     }
 
     public async Task<CatalogItemDto> Category(User user, Guid? id, CatalogRequest input, CancellationToken ct)
@@ -81,9 +81,8 @@ public sealed class CatalogService(Database db, TimeProvider clock, ILogger<Cata
         }
         else
         {
-            if (input.Currency is null || !Rules.Currencies.Contains(input.Currency)) throw new ApiError("invalid_currency");
-            category.MonthlyLimit = Rules.Amount(input.Amount, input.Currency);
-            category.LimitCurrency = input.Currency;
+            category.MonthlyLimit = Rules.Amount(input.Amount, user.Currency);
+            category.LimitCurrency = user.Currency;
         }
         category.Version++;
         await db.SaveChangesAsync(ct);

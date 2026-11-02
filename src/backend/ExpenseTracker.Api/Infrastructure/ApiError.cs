@@ -47,7 +47,8 @@ public static class Rules
     public static decimal Amount(string value, string currency)
     {
         if (!Currencies.Contains(currency)) throw new ApiError("invalid_currency");
-        var digits = currency == "JPY" ? 0 : 2;
+        // Changing the display currency must preserve fractional amounts.
+        const int digits = 2;
         if (!decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var amount)
             || amount <= 0 || amount > 9999999999999999m || decimal.Round(amount, digits) != amount)
             throw new ApiError("invalid_amount");

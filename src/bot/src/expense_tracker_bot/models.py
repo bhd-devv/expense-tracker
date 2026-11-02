@@ -194,6 +194,48 @@ class CategoryLimitRequest(BaseModel):
     version: int
 
 
+class CreateSavingsRequest(BaseModel):
+    requestId: UUID
+    name: str
+    currency: str
+
+
+class SavingsEntryRequest(BaseModel):
+    requestId: UUID
+    kind: str
+    amount: str
+    date: date_aliased
+    description: str
+
+
+class SavingsAccountDto(BaseModel):
+    id: UUID
+    name: str
+    currency: str
+    balance: str
+    added: str
+    spent: str
+
+
+class SavingsAccountsDto(BaseModel):
+    items: list[SavingsAccountDto]
+
+
+class SavingsEntryDto(BaseModel):
+    id: UUID
+    kind: str
+    amount: str
+    date: date_aliased
+    description: str
+
+
+class SavingsEntryPage(BaseModel):
+    account: SavingsAccountDto
+    items: list[SavingsEntryDto]
+    page: int
+    hasMore: bool
+
+
 class CatalogItemDto(BaseModel):
     id: UUID
     name: str

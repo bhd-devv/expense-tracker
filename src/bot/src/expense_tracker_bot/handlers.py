@@ -25,6 +25,7 @@ from .copy import COPY, CURRENCIES, category
 from .models import (
     CatalogDto,
     CatalogItemDto,
+    CategoryIconLibraryDto,
     ConversationDto,
     DraftDto,
     ExpenseDto,
@@ -57,11 +58,13 @@ def button(
     return t.get(label, label), Action(action=action, entity=entity, field=field, version=version)
 
 
-def keyboard(rows: list[tuple[str, Action]], width: int = 2) -> InlineKeyboardMarkup:
+def keyboard(
+    rows: list[tuple[str, Action]], width: int | tuple[int, ...] = 2
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for label, data in rows:
         builder.button(text=label, callback_data=data.pack())
-    builder.adjust(width)
+    builder.adjust(*(width if isinstance(width, tuple) else (width,)))
     return builder.as_markup()
 
 
@@ -146,12 +149,12 @@ async def show_record(
         button(t, field, "field", entity, f"{kind}.{field}", int(record.version))
         for field in fields
     ]
-    if not isinstance(record, DraftDto) or record.errorCode != "date_needs_clarification":
+    if isinstance(record, DraftDto) and record.errorCode != "date_needs_clarification":
         rows.append(
             button(
                 t,
-                "save" if kind == "d" else "delete",
-                "save" if kind == "d" else "delete",
+                "save",
+                "save",
                 entity,
                 kind,
                 int(record.version),
@@ -206,40 +209,155 @@ async def browse(
         )
     else:
         result = await api.get("/expenses?" + urlencode(query), ExpensePage)
-        records = [
-            button(
-                t,
-                f"{item.date} · {item.description[:25]} · {item.amount} {item.currency}",
-                "open",
-                compact(item.id),
-                "e",
+        records: list[tuple[str, Action]] = []
+        for item in result.items:
+            records.append(
+                button(
+                    t,
+                    f"{item.date} · {item.description[:25]} · {item.amount} {item.currency}",
+                    "open",
+                    compact(item.id),
+                    "e",
+                )
             )
-            for item in result.items
-        ]
+            records.append(
+                button(t, "🗑 " + t["delete"], "delete", compact(item.id), "e", item.version)
+            )
         if page:
             records.append(button(t, "previous", "page", str(page - 1)))
         if result.hasMore:
             records.append(button(t, "next", "page", str(page + 1)))
         await message.answer(
-            t["expenses"] if result.items else t["empty"], reply_markup=keyboard(records + rows, 1)
+            t["expenses"] if result.items else t["empty"],
+            reply_markup=keyboard(records + rows, (2,) * len(result.items) + (1,)),
         )
 
 
-async def catalogs(message: Message, api: Api, t: dict[str, str]) -> None:
+async def catalogs(message: Message, api: Api, t: dict[str, str], page: int = 0) -> None:
     catalog = await api.get("/catalog", CatalogDto)
-    items = catalog.categories
-    rows = [
-        button(
-            t,
-            ("○ " if item.archived else "") + category(item, t)[:35],
-            "catalog",
-            compact(item.id),
-            "categories",
+    if page < 0:
+        raise ApiError("conflict", 409)
+    page = min(page, max(0, (len(catalog.categories) - 1) // 20))
+    items = catalog.categories[page * 20 : (page + 1) * 20]
+    rows: list[tuple[str, Action]] = []
+    for item in items:
+        rows.append(
+            button(
+                t,
+                ("○ " if item.archived else "") + category(item, t)[:35],
+                "catalog",
+                compact(item.id),
+                "categories",
+            )
         )
-        for item in items
-    ]
+        rows.append(
+            button(t, "🗑 " + t["delete"], "catdelete", compact(item.id), "categories", item.version)
+        )
     rows.append(button(t, "create", "new", "categories"))
-    await message.answer(t["categories"], reply_markup=keyboard(rows, 1))
+    if page:
+        rows.append(button(t, "previous", "catlist", str(page - 1)))
+    if len(catalog.categories) > (page + 1) * 20:
+        rows.append(button(t, "next", "catlist", str(page + 1)))
+    lines = [t["categories"]] + [
+        category(item, t) + "\n" + category_limit_text(item, t) for item in items if item.limit
+    ]
+    await message.answer(
+        "\n\n".join(lines)[:3900], reply_markup=keyboard(rows, (2,) * len(items) + (1,))
+    )
+
+
+def category_limit_text(item: CatalogItemDto, t: dict[str, str]) -> str:
+    limit = item.limit
+    if limit is None:
+        return t["noCategoryLimit"]
+    filled = min(10, int(limit.usedPercent / 10))
+    bar = "█" * filled + "░" * (10 - filled)
+    percent = f"{limit.usedPercent:.1f}".rstrip("0").rstrip(".")
+    if t is COPY["uk"]:
+        percent = percent.replace(".", ",")
+    lines = [
+        f"{t['monthlyLimit']} · {limit.from_:%Y-%m}",
+        f"{bar} {percent}%",
+        f"{limit.spent} / {limit.amount} {limit.currency}",
+    ]
+    if limit.exceeded:
+        lines.append(t["limitExceeded"])
+    return "\n".join(lines)
+
+
+async def choose_limit_currency(
+    message: Message, api: Api, t: dict[str, str], conversation: ConversationDto
+) -> None:
+    item = await find_item(api, conversation.entityId or "")
+    if str(item.version) != conversation.field:
+        raise ApiError("conflict", 409)
+    rows = [
+        button(t, currency, "limitcurrency", currency, version=conversation.version)
+        for currency in CURRENCIES
+    ]
+    if item.limit:
+        rows.append(
+            button(
+                t, "removeCategoryLimit", "limitclear", compact(item.id), "categories", item.version
+            )
+        )
+    rows.append(button(t, "cancel", "limitcancel", version=conversation.version))
+    await message.answer(
+        category(item, t) + "\n" + category_limit_text(item, t) + "\n\n" + t["limitCurrency"],
+        reply_markup=keyboard(rows),
+    )
+
+
+async def category_icons(
+    message: Message,
+    api: Api,
+    t: dict[str, str],
+    conversation: ConversationDto,
+    group_id: str = "_",
+) -> None:
+    library = await api.get("/category-icons", CategoryIconLibraryDto)
+    english = t is COPY["en"]
+    item = await find_item(api, conversation.entityId or "")
+    if str(item.version) != conversation.field:
+        raise ApiError("conflict", 409)
+    group = next((item for item in library.groups if item.id == group_id), None)
+    if group_id != "_" and group is None:
+        raise ApiError("conflict", 409)
+    if group is None:
+        rows = [
+            button(
+                t,
+                item.en if english else item.uk,
+                "icongroup",
+                item.id,
+                version=conversation.version,
+            )
+            for item in library.groups
+        ]
+    else:
+        rows = [
+            button(
+                t,
+                ("✓ " if icon.id == item.icon else "")
+                + icon.symbol
+                + " "
+                + (icon.en if english else icon.uk),
+                "iconset",
+                icon.id,
+                version=conversation.version,
+            )
+            for icon in group.icons
+        ]
+        rows.append(button(t, "iconGroups", "icongroup", version=conversation.version))
+    rows.append(button(t, "back", "iconback", version=conversation.version))
+    current = next(
+        (icon for family in library.groups for icon in family.icons if icon.id == item.icon), None
+    )
+    title = (current.symbol + " " if current else "") + category(item, t)
+    await message.answer(
+        title + "\n" + (t["chooseIcon"] if group is None else group.en if english else group.uk),
+        reply_markup=keyboard(rows, 2),
+    )
 
 
 async def settings(message: Message, api: Api, profile: ProfileDto, t: dict[str, str]) -> None:
@@ -304,7 +422,7 @@ async def input_value(
     elif conversation.state == "new":
         if entity != "categories":
             raise ApiError("conflict", 409)
-        await api.mutate(
+        created = await api.mutate(
             "POST",
             f"/{entity}",
             CatalogItemDto,
@@ -314,8 +432,8 @@ async def input_value(
                 "version": 0,
             },
         )
-        await state(api, "idle")
-        await catalogs(message, api, t)
+        current = await state(api, "category_icon", str(created.id), str(created.version))
+        await category_icons(message, api, t, current)
     elif conversation.state == "rename":
         kind, expected = field.split(".")
         if kind != "categories":
@@ -328,6 +446,23 @@ async def input_value(
             f"/{kind}/{item.id}",
             CatalogItemDto,
             {**item.model_dump(mode="json"), "name": text},
+        )
+        await state(api, "idle")
+        await catalogs(message, api, t)
+    elif conversation.state == "category_limit":
+        expected, currency = field.split(".")
+        item = await find_item(api, entity)
+        if str(item.version) != expected:
+            raise ApiError("conflict", 409)
+        await api.mutate(
+            "PUT",
+            f"/categories/{item.id}/limit",
+            CatalogItemDto,
+            {
+                "amount": text.replace(",", "."),
+                "currency": currency,
+                "version": item.version,
+            },
         )
         await state(api, "idle")
         await catalogs(message, api, t)
@@ -451,7 +586,20 @@ async def handle_message(
                     await message.answer(t["openAppPrompt"], reply_markup=app_keyboard(t, app_url))
             return
         conversation = await api.get("/conversation", ConversationDto)
-        if conversation.state in ("record", "new", "rename", "preference", "period"):
+        if conversation.state == "category_icon":
+            await category_icons(message, api, t, conversation)
+            return
+        if conversation.state == "category_limit_currency":
+            await choose_limit_currency(message, api, t, conversation)
+            return
+        if conversation.state in (
+            "record",
+            "new",
+            "rename",
+            "preference",
+            "period",
+            "category_limit",
+        ):
             logger.info("Dialog input received", extra={"details": {"state": conversation.state}})
             if text:
                 await input_value(message, api, conversation, text, t, app_url)
@@ -550,9 +698,19 @@ async def handle_callback(
             "new",
             "catalog",
             "rename",
-            "archive",
+            "catdelete",
+            "catremove",
+            "catlist",
+            "catlimit",
+            "limitcurrency",
+            "limitclear",
+            "limitcancel",
             "setting",
             "preference",
+            "icon",
+            "icongroup",
+            "iconset",
+            "iconback",
         }
         else "unknown"
     )
@@ -605,7 +763,7 @@ async def handle_callback(
                     reply_markup=keyboard(
                         [
                             button(t, "confirm", "remove", data.entity, "e", data.version),
-                            button(t, "cancel", "open", data.entity, "e"),
+                            button(t, "cancel", "browse"),
                         ]
                     ),
                 )
@@ -615,6 +773,7 @@ async def handle_callback(
                 )
                 await message.edit_reply_markup(reply_markup=None)
                 await message.answer(t["deleted"])
+                await browse(message, api, t)
             elif data.action == "field":
                 name = data.field.split(".")[1]
                 if name not in ("amount", "currency", "description", "date", "categoryId"):
@@ -750,7 +909,82 @@ async def handle_callback(
                 t["name"] + ": " + t["input"],
                 reply_markup=keyboard([button(t, "cancel", "reset")]),
             )
-        elif data.action in ("catalog", "rename", "archive"):
+        elif data.action in ("icongroup", "iconset", "iconback"):
+            conversation = await api.get("/conversation", ConversationDto)
+            if conversation.state != "category_icon" or conversation.version != data.version:
+                raise ApiError("conflict", 409)
+            if data.action == "icongroup":
+                await category_icons(message, api, t, conversation, data.entity)
+            elif data.action == "iconback":
+                await state(api, "idle")
+                await catalogs(message, api, t)
+            else:
+                item = await find_item(api, conversation.entityId or "")
+                if str(item.version) != conversation.field:
+                    raise ApiError("conflict", 409)
+                await api.mutate(
+                    "PUT",
+                    f"/categories/{item.id}",
+                    CatalogItemDto,
+                    {**item.model_dump(mode="json"), "icon": data.entity},
+                )
+                await state(api, "idle")
+                await message.edit_reply_markup(reply_markup=None)
+                await catalogs(message, api, t)
+        elif data.action == "catlist":
+            await catalogs(message, api, t, int(data.entity) if data.entity != "_" else 0)
+        elif data.action in ("catdelete", "catremove"):
+            if data.field != "categories":
+                raise ApiError("conflict", 409)
+            item = await find_item(api, data.entity)
+            if item.version != data.version:
+                raise ApiError("conflict", 409)
+            if data.action == "catdelete":
+                await message.answer(
+                    t["confirmDeleteCategory"] + "\n" + category(item, t),
+                    reply_markup=keyboard(
+                        [
+                            button(
+                                t, "confirm", "catremove", data.entity, "categories", item.version
+                            ),
+                            button(t, "cancel", "catlist"),
+                        ]
+                    ),
+                )
+            else:
+                await api.call("DELETE", f"/categories/{item.id}?version={data.version}")
+                await state(api, "idle")
+                await message.edit_reply_markup(reply_markup=None)
+                await message.answer(t["categoryDeleted"])
+                await catalogs(message, api, t)
+        elif data.action in ("limitcurrency", "limitcancel"):
+            conversation = await api.get("/conversation", ConversationDto)
+            if conversation.version != data.version or conversation.state not in (
+                "category_limit_currency",
+                "category_limit",
+            ):
+                raise ApiError("conflict", 409)
+            if data.action == "limitcancel":
+                await state(api, "idle")
+                await catalogs(message, api, t)
+            else:
+                if conversation.state != "category_limit_currency" or data.entity not in CURRENCIES:
+                    raise ApiError("conflict", 409)
+                item = await find_item(api, conversation.entityId or "")
+                if str(item.version) != conversation.field:
+                    raise ApiError("conflict", 409)
+                current = await state(
+                    api, "category_limit", str(item.id), f"{item.version}.{data.entity}"
+                )
+                await message.answer(
+                    t["limitAmount"] + f" · {data.entity}\n" + t["limitCurrencyHint"],
+                    reply_markup=keyboard(
+                        [
+                            button(t, "cancel", "limitcancel", version=current.version),
+                        ]
+                    ),
+                )
+        elif data.action in ("catalog", "rename", "icon", "catlimit", "limitclear"):
             if data.field != "categories":
                 raise ApiError("conflict", 409)
             item = await find_item(api, data.entity)
@@ -758,31 +992,43 @@ async def handle_callback(
                 raise ApiError("conflict", 409)
             if data.action == "catalog":
                 rows = [
+                    button(t, "chooseIcon", "icon", data.entity, data.field, int(item.version)),
                     button(t, "edit", "rename", data.entity, data.field, int(item.version)),
-                    button(
-                        t,
-                        "restore" if item.archived else "archive",
-                        "archive",
-                        data.entity,
-                        data.field,
-                        int(item.version),
-                    ),
+                    button(t, "monthlyLimit", "catlimit", data.entity, data.field, item.version),
+                    button(t, "delete", "catdelete", data.entity, "categories", item.version),
                 ]
-                await message.answer(category(item, t), reply_markup=keyboard(rows))
+                await message.answer(
+                    category(item, t) + "\n" + category_limit_text(item, t),
+                    reply_markup=keyboard(rows),
+                )
+            elif data.action == "catlimit":
+                current = await state(
+                    api, "category_limit_currency", str(item.id), str(item.version)
+                )
+                await choose_limit_currency(message, api, t, current)
+            elif data.action == "limitclear":
+                await api.mutate(
+                    "PUT",
+                    f"/categories/{item.id}/limit",
+                    CatalogItemDto,
+                    {
+                        "amount": None,
+                        "currency": None,
+                        "version": item.version,
+                    },
+                )
+                await state(api, "idle")
+                await message.edit_reply_markup(reply_markup=None)
+                await catalogs(message, api, t)
+            elif data.action == "icon":
+                current = await state(api, "category_icon", str(item.id), str(item.version))
+                await category_icons(message, api, t, current)
             elif data.action == "rename":
                 await state(api, "rename", data.entity, f"{data.field}.{data.version}")
                 await message.answer(
                     t["name"] + ": " + t["input"],
                     reply_markup=keyboard([button(t, "cancel", "reset")]),
                 )
-            else:
-                await api.mutate(
-                    "PUT",
-                    f"/{data.field}/{item.id}",
-                    CatalogItemDto,
-                    {**item.model_dump(mode="json"), "archived": not item.archived},
-                )
-                await catalogs(message, api, t)
         elif data.action == "setting":
             if int(profile.version) != data.version:
                 raise ApiError("conflict", 409)
@@ -843,7 +1089,9 @@ async def handle_callback(
     except ApiError as error:
         log_failure(logger, "Callback action rejected", error, status=error.status)
         await message.answer(
-            t["stale"]
+            t["categoryInUse"]
+            if error.code == "category_in_use"
+            else t["stale"]
             if error.status in (404, 409)
             else t["error"]
             if error.status < 500

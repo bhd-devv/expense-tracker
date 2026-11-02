@@ -21,6 +21,9 @@ public sealed class Category
     public Guid UserId { get; set; }
     public string Name { get; set; } = "";
     public string? Code { get; set; }
+    public string? Icon { get; set; }
+    public decimal? MonthlyLimit { get; set; }
+    public string? LimitCurrency { get; set; }
     public bool Archived { get; set; }
     public int Version { get; set; } = 1;
 }
@@ -136,6 +139,9 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
         model.Entity<Category>().HasAlternateKey(x => new { x.UserId, x.Id });
         model.Entity<Category>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
         model.Entity<Category>().Property(x => x.Version).IsConcurrencyToken();
+        model.Entity<Category>().Property(x => x.MonthlyLimit).HasPrecision(20, 4);
+        model.Entity<Category>().ToTable(t => t.HasCheckConstraint("valid_category_limit",
+            "(\"MonthlyLimit\" IS NULL AND \"LimitCurrency\" IS NULL) OR (\"MonthlyLimit\" IS NOT NULL AND \"MonthlyLimit\" > 0 AND \"LimitCurrency\" IS NOT NULL)"));
         model.Entity<Expense>(entity =>
         {
             entity.Property(x => x.Amount).HasPrecision(20, 4);

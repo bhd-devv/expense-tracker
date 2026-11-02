@@ -1,0 +1,674 @@
+{
+  "groups": [
+    {
+      "id": "food",
+      "uk": "Їжа та напої",
+      "en": "Food & drinks",
+      "icons": [
+        {
+          "id": "utensils-crossed",
+          "uk": "Їжа",
+          "en": "Meals",
+          "symbol": "🍽"
+        },
+        {
+          "id": "coffee",
+          "uk": "Кава",
+          "en": "Coffee",
+          "symbol": "☕"
+        },
+        {
+          "id": "cup-soda",
+          "uk": "Напої",
+          "en": "Drinks",
+          "symbol": "🥤"
+        },
+        {
+          "id": "soup",
+          "uk": "Суп",
+          "en": "Soup",
+          "symbol": "🍲"
+        },
+        {
+          "id": "pizza",
+          "uk": "Піца",
+          "en": "Pizza",
+          "symbol": "🍕"
+        },
+        {
+          "id": "sandwich",
+          "uk": "Перекус",
+          "en": "Sandwich",
+          "symbol": "🥪"
+        },
+        {
+          "id": "apple",
+          "uk": "Фрукти",
+          "en": "Fruit",
+          "symbol": "🍎"
+        },
+        {
+          "id": "carrot",
+          "uk": "Овочі",
+          "en": "Vegetables",
+          "symbol": "🥕"
+        },
+        {
+          "id": "fish",
+          "uk": "Риба",
+          "en": "Fish",
+          "symbol": "🐟"
+        },
+        {
+          "id": "cake-slice",
+          "uk": "Десерти",
+          "en": "Desserts",
+          "symbol": "🍰"
+        }
+      ]
+    },
+    {
+      "id": "transport",
+      "uk": "Транспорт",
+      "en": "Transport",
+      "icons": [
+        {
+          "id": "car-front",
+          "uk": "Авто й таксі",
+          "en": "Car & taxi",
+          "symbol": "🚗"
+        },
+        {
+          "id": "bus",
+          "uk": "Автобус",
+          "en": "Bus",
+          "symbol": "🚌"
+        },
+        {
+          "id": "train-front",
+          "uk": "Потяг",
+          "en": "Train",
+          "symbol": "🚆"
+        },
+        {
+          "id": "bike",
+          "uk": "Велосипед",
+          "en": "Bicycle",
+          "symbol": "🚲"
+        },
+        {
+          "id": "footprints",
+          "uk": "Пішки",
+          "en": "Walking",
+          "symbol": "👣"
+        },
+        {
+          "id": "fuel",
+          "uk": "Пальне",
+          "en": "Fuel",
+          "symbol": "⛽"
+        },
+        {
+          "id": "parking-meter",
+          "uk": "Паркування",
+          "en": "Parking",
+          "symbol": "🅿️"
+        },
+        {
+          "id": "ship",
+          "uk": "Корабель",
+          "en": "Ship",
+          "symbol": "🚢"
+        },
+        {
+          "id": "plane",
+          "uk": "Літак",
+          "en": "Flight",
+          "symbol": "✈️"
+        },
+        {
+          "id": "tram-front",
+          "uk": "Трамвай",
+          "en": "Tram",
+          "symbol": "🚋"
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "uk": "Дім і побут",
+      "en": "Home & utilities",
+      "icons": [
+        {
+          "id": "house",
+          "uk": "Дім",
+          "en": "Home",
+          "symbol": "🏠"
+        },
+        {
+          "id": "building",
+          "uk": "Оренда й житло",
+          "en": "Rent & housing",
+          "symbol": "🏢"
+        },
+        {
+          "id": "sofa",
+          "uk": "Меблі",
+          "en": "Furniture",
+          "symbol": "🛋"
+        },
+        {
+          "id": "bed-double",
+          "uk": "Спальня",
+          "en": "Bedroom",
+          "symbol": "🛏"
+        },
+        {
+          "id": "bath",
+          "uk": "Ванна",
+          "en": "Bathroom",
+          "symbol": "🛁"
+        },
+        {
+          "id": "lamp",
+          "uk": "Освітлення",
+          "en": "Lighting",
+          "symbol": "💡"
+        },
+        {
+          "id": "washing-machine",
+          "uk": "Прання",
+          "en": "Laundry",
+          "symbol": "🧺"
+        },
+        {
+          "id": "refrigerator",
+          "uk": "Побутова техніка",
+          "en": "Appliances",
+          "symbol": "🧊"
+        },
+        {
+          "id": "plug-zap",
+          "uk": "Електроенергія",
+          "en": "Electricity",
+          "symbol": "🔌"
+        },
+        {
+          "id": "key-round",
+          "uk": "Ключі",
+          "en": "Keys",
+          "symbol": "🔑"
+        }
+      ]
+    },
+    {
+      "id": "shopping",
+      "uk": "Покупки й одяг",
+      "en": "Shopping & clothing",
+      "icons": [
+        {
+          "id": "shopping-bag",
+          "uk": "Покупки",
+          "en": "Shopping",
+          "symbol": "🛍"
+        },
+        {
+          "id": "shopping-cart",
+          "uk": "Супермаркет",
+          "en": "Supermarket",
+          "symbol": "🛒"
+        },
+        {
+          "id": "shirt",
+          "uk": "Одяг",
+          "en": "Clothing",
+          "symbol": "👕"
+        },
+        {
+          "id": "watch",
+          "uk": "Годинники",
+          "en": "Watches",
+          "symbol": "⌚"
+        },
+        {
+          "id": "gem",
+          "uk": "Прикраси",
+          "en": "Jewellery",
+          "symbol": "💎"
+        },
+        {
+          "id": "glasses",
+          "uk": "Окуляри",
+          "en": "Glasses",
+          "symbol": "👓"
+        },
+        {
+          "id": "shopping-basket",
+          "uk": "Кошик",
+          "en": "Basket",
+          "symbol": "🧺"
+        },
+        {
+          "id": "gift",
+          "uk": "Подарунки",
+          "en": "Gifts",
+          "symbol": "🎁"
+        },
+        {
+          "id": "store",
+          "uk": "Магазин",
+          "en": "Store",
+          "symbol": "🏪"
+        },
+        {
+          "id": "package",
+          "uk": "Доставка",
+          "en": "Delivery",
+          "symbol": "📦"
+        }
+      ]
+    },
+    {
+      "id": "health",
+      "uk": "Здоров’я",
+      "en": "Health",
+      "icons": [
+        {
+          "id": "heart-pulse",
+          "uk": "Здоров’я",
+          "en": "Health",
+          "symbol": "❤️"
+        },
+        {
+          "id": "stethoscope",
+          "uk": "Лікар",
+          "en": "Doctor",
+          "symbol": "🩺"
+        },
+        {
+          "id": "pill",
+          "uk": "Ліки",
+          "en": "Medicine",
+          "symbol": "💊"
+        },
+        {
+          "id": "syringe",
+          "uk": "Щеплення",
+          "en": "Vaccination",
+          "symbol": "💉"
+        },
+        {
+          "id": "bandage",
+          "uk": "Перша допомога",
+          "en": "First aid",
+          "symbol": "🩹"
+        },
+        {
+          "id": "hospital",
+          "uk": "Лікарня",
+          "en": "Hospital",
+          "symbol": "🏥"
+        },
+        {
+          "id": "cross",
+          "uk": "Аптека",
+          "en": "Pharmacy",
+          "symbol": "➕"
+        },
+        {
+          "id": "brain",
+          "uk": "Психологія",
+          "en": "Mental health",
+          "symbol": "🧠"
+        },
+        {
+          "id": "eye",
+          "uk": "Зір",
+          "en": "Vision",
+          "symbol": "👁"
+        },
+        {
+          "id": "accessibility",
+          "uk": "Доступність",
+          "en": "Accessibility",
+          "symbol": "♿"
+        }
+      ]
+    },
+    {
+      "id": "leisure",
+      "uk": "Дозвілля",
+      "en": "Entertainment",
+      "icons": [
+        {
+          "id": "ticket",
+          "uk": "Квитки",
+          "en": "Tickets",
+          "symbol": "🎟"
+        },
+        {
+          "id": "clapperboard",
+          "uk": "Кіно",
+          "en": "Cinema",
+          "symbol": "🎬"
+        },
+        {
+          "id": "list-music",
+          "uk": "Музика",
+          "en": "ListMusic",
+          "symbol": "🎵"
+        },
+        {
+          "id": "headphones",
+          "uk": "Аудіо",
+          "en": "Audio",
+          "symbol": "🎧"
+        },
+        {
+          "id": "gamepad2",
+          "uk": "Ігри",
+          "en": "Gaming",
+          "symbol": "🎮"
+        },
+        {
+          "id": "tv",
+          "uk": "Телебачення",
+          "en": "Television",
+          "symbol": "📺"
+        },
+        {
+          "id": "camera",
+          "uk": "Фото",
+          "en": "Photography",
+          "symbol": "📷"
+        },
+        {
+          "id": "palette",
+          "uk": "Мистецтво",
+          "en": "Art",
+          "symbol": "🎨"
+        },
+        {
+          "id": "party-popper",
+          "uk": "Свята",
+          "en": "Celebrations",
+          "symbol": "🎉"
+        },
+        {
+          "id": "ferris-wheel",
+          "uk": "Атракціони",
+          "en": "Amusement park",
+          "symbol": "🎡"
+        }
+      ]
+    },
+    {
+      "id": "outdoors",
+      "uk": "Спорт і природа",
+      "en": "Sport & outdoors",
+      "icons": [
+        {
+          "id": "dumbbell",
+          "uk": "Фітнес",
+          "en": "Fitness",
+          "symbol": "🏋️"
+        },
+        {
+          "id": "volleyball",
+          "uk": "Спорт",
+          "en": "Sport",
+          "symbol": "🏐"
+        },
+        {
+          "id": "trophy",
+          "uk": "Змагання",
+          "en": "Competitions",
+          "symbol": "🏆"
+        },
+        {
+          "id": "medal",
+          "uk": "Медалі",
+          "en": "Medals",
+          "symbol": "🏅"
+        },
+        {
+          "id": "activity",
+          "uk": "Активність",
+          "en": "Activity",
+          "symbol": "💓"
+        },
+        {
+          "id": "tent",
+          "uk": "Кемпінг",
+          "en": "Camping",
+          "symbol": "⛺"
+        },
+        {
+          "id": "mountain",
+          "uk": "Гори",
+          "en": "Mountains",
+          "symbol": "⛰"
+        },
+        {
+          "id": "trees",
+          "uk": "Природа",
+          "en": "Nature",
+          "symbol": "🌳"
+        },
+        {
+          "id": "flower2",
+          "uk": "Квіти",
+          "en": "Flowers",
+          "symbol": "🌷"
+        },
+        {
+          "id": "waves-ladder",
+          "uk": "Плавання",
+          "en": "Swimming",
+          "symbol": "🌊"
+        }
+      ]
+    },
+    {
+      "id": "work",
+      "uk": "Робота й навчання",
+      "en": "Work & learning",
+      "icons": [
+        {
+          "id": "briefcase",
+          "uk": "Робота",
+          "en": "Work",
+          "symbol": "💼"
+        },
+        {
+          "id": "graduation-cap",
+          "uk": "Освіта",
+          "en": "Education",
+          "symbol": "🎓"
+        },
+        {
+          "id": "book-open",
+          "uk": "Книги",
+          "en": "Books",
+          "symbol": "📖"
+        },
+        {
+          "id": "notebook-pen",
+          "uk": "Канцелярія",
+          "en": "Stationery",
+          "symbol": "📝"
+        },
+        {
+          "id": "pencil",
+          "uk": "Письмо",
+          "en": "Writing",
+          "symbol": "✏️"
+        },
+        {
+          "id": "ruler",
+          "uk": "Креслення",
+          "en": "Drawing tools",
+          "symbol": "📏"
+        },
+        {
+          "id": "calculator",
+          "uk": "Розрахунки",
+          "en": "Calculations",
+          "symbol": "🧮"
+        },
+        {
+          "id": "presentation",
+          "uk": "Курси",
+          "en": "Courses",
+          "symbol": "📊"
+        },
+        {
+          "id": "library-big",
+          "uk": "Бібліотека",
+          "en": "Library",
+          "symbol": "📚"
+        },
+        {
+          "id": "school",
+          "uk": "Школа",
+          "en": "School",
+          "symbol": "🏫"
+        }
+      ]
+    },
+    {
+      "id": "tech",
+      "uk": "Техніка й зв’язок",
+      "en": "Technology & internet",
+      "icons": [
+        {
+          "id": "smartphone",
+          "uk": "Телефон",
+          "en": "Phone",
+          "symbol": "📱"
+        },
+        {
+          "id": "laptop",
+          "uk": "Ноутбук",
+          "en": "Laptop",
+          "symbol": "💻"
+        },
+        {
+          "id": "monitor",
+          "uk": "Комп’ютер",
+          "en": "Computer",
+          "symbol": "🖥"
+        },
+        {
+          "id": "keyboard",
+          "uk": "Клавіатура",
+          "en": "Keyboard",
+          "symbol": "⌨️"
+        },
+        {
+          "id": "mouse",
+          "uk": "Миша",
+          "en": "Mouse",
+          "symbol": "🖱"
+        },
+        {
+          "id": "printer",
+          "uk": "Друк",
+          "en": "Printing",
+          "symbol": "🖨"
+        },
+        {
+          "id": "wifi",
+          "uk": "Інтернет",
+          "en": "Internet",
+          "symbol": "📶"
+        },
+        {
+          "id": "globe",
+          "uk": "Онлайн-сервіси",
+          "en": "Online services",
+          "symbol": "🌐"
+        },
+        {
+          "id": "cloud",
+          "uk": "Хмарні сервіси",
+          "en": "Cloud services",
+          "symbol": "☁️"
+        },
+        {
+          "id": "cable",
+          "uk": "Кабелі",
+          "en": "Cables",
+          "symbol": "🔗"
+        }
+      ]
+    },
+    {
+      "id": "services",
+      "uk": "Послуги та інше",
+      "en": "Services & other",
+      "icons": [
+        {
+          "id": "tags",
+          "uk": "Категорія",
+          "en": "Category",
+          "symbol": "🏷"
+        },
+        {
+          "id": "receipt-text",
+          "uk": "Чеки",
+          "en": "Receipts",
+          "symbol": "🧾"
+        },
+        {
+          "id": "credit-card",
+          "uk": "Оплата послуг",
+          "en": "Service payments",
+          "symbol": "💳"
+        },
+        {
+          "id": "banknote",
+          "uk": "Готівкові витрати",
+          "en": "Cash expenses",
+          "symbol": "💵"
+        },
+        {
+          "id": "landmark",
+          "uk": "Податки й збори",
+          "en": "Taxes & fees",
+          "symbol": "🏛"
+        },
+        {
+          "id": "wrench",
+          "uk": "Ремонт",
+          "en": "Repairs",
+          "symbol": "🔧"
+        },
+        {
+          "id": "scissors",
+          "uk": "Краса й догляд",
+          "en": "Beauty & grooming",
+          "symbol": "✂️"
+        },
+        {
+          "id": "dog",
+          "uk": "Домашні тварини",
+          "en": "Pets",
+          "symbol": "🐕"
+        },
+        {
+          "id": "baby",
+          "uk": "Діти",
+          "en": "Children",
+          "symbol": "👶"
+        },
+        {
+          "id": "hand-heart",
+          "uk": "Благодійність",
+          "en": "Charity",
+          "symbol": "🤲"
+        }
+      ]
+    }
+  ]
+}

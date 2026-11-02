@@ -15,10 +15,18 @@ public static class WorkspaceEndpoints
             await users.Update(await users.Current(context, ct), input, ct));
         group.MapGet("/catalog", async (HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
             await catalogs.List(await users.Current(context, ct), ct));
+        group.MapGet("/category-icons", () => CategoryIcons.Library);
+        group.MapPut("/categories/{id:guid}/limit", async (Guid id, CategoryLimitRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
+            await catalogs.Limit(await users.Current(context, ct), id, input, ct));
         group.MapPost("/categories", async (CatalogRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
             await catalogs.Category(await users.Current(context, ct), null, input, ct));
         group.MapPut("/categories/{id:guid}", async (Guid id, CatalogRequest input, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
             await catalogs.Category(await users.Current(context, ct), id, input, ct));
+        group.MapDelete("/categories/{id:guid}", async (Guid id, int version, HttpContext context, UserService users, CatalogService catalogs, CancellationToken ct) =>
+        {
+            await catalogs.Delete(await users.Current(context, ct), id, version, ct);
+            return Results.NoContent();
+        }).Produces(StatusCodes.Status204NoContent);
         group.MapGet("/expenses", async (DateOnly? from, DateOnly? to, Guid? categoryId, int? page,
             HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.List(await users.Current(context, ct), from, to, categoryId, page ?? 0, ct));

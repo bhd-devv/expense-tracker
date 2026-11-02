@@ -23,7 +23,14 @@ from aiogram.types import (
 
 from expense_tracker_bot.api import Api
 from expense_tracker_bot.copy import COPY
-from expense_tracker_bot.handlers import Action, handle_callback, handle_message, router
+from expense_tracker_bot.handlers import (
+    Action,
+    browse,
+    catalogs,
+    handle_callback,
+    handle_message,
+    router,
+)
 from expense_tracker_bot.main import minimal_update
 from expense_tracker_bot.models import CatalogDto, ExpensePage
 
@@ -596,4 +603,421 @@ async def test_entry_mode_switch_preserves_ai_consent(language: str) -> None:
         for row in settings_message.reply_markup.inline_keyboard
         for button in row
     )
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+async def test_category_icon_picker_groups_selection_and_stale_buttons(language: str) -> None:
+    category_id = "00000000-0000-0000-0000-000000000043"
+    item = {
+        "id": category_id,
+        "name": "Їжа та напої",
+        "code": "food",
+        "icon": "utensils-crossed",
+        "archived": False,
+        "version": 1,
+    }
+    conversation = {"state": "idle", "entityId": None, "field": None, "version": 0}
+    mutations: list[dict[str, object]] = []
+    library = {
+        "groups": [
+            {
+                "id": "food",
+                "uk": "Їжа та напої",
+                "en": "Food & drinks",
+                "icons": [
+                    {"id": "coffee", "uk": "Кава", "en": "Coffee", "symbol": "☕"},
+                    {"id": "utensils-crossed", "uk": "Їжа", "en": "Meals", "symbol": "🍽"},
+                ],
+            }
+        ]
+    }
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/profile"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "aiConsent": False,
+                    "inputMode": "manual",
+                    "version": 1,
+                    "today": "2026-11-02",
+                },
+            )
+        if path.endswith("/conversation"):
+            if request.method == "PUT":
+                payload = json.loads(request.content)
+                conversation.update(payload)
+                conversation["version"] = payload["version"] + 1
+            return httpx.Response(200, json=conversation)
+        if path.endswith("/catalog"):
+            return httpx.Response(200, json={"categories": [item]})
+        if path.endswith("/category-icons"):
+            return httpx.Response(200, json=library)
+        assert path.endswith(f"/categories/{category_id}")
+        assert request.method == "PUT"
+        payload = json.loads(request.content)
+        mutations.append(payload)
+        assert payload["name"] == item["name"]
+        assert payload["code"] == "food"
+        assert payload["icon"] == "coffee"
+        assert payload["version"] == 1
+        item.update(payload)
+        item["version"] = 2
+        return httpx.Response(200, json=item)
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    user = User(id=42, is_bot=False, first_name="Synthetic", language_code=language)
+    message = Message(message_id=1, date=datetime.now(UTC), chat=Chat(id=42, type="private")).as_(
+        bot
+    )
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        for action in [
+            Action(
+                action="icon", entity=category_id.replace("-", ""), field="categories", version=1
+            ),
+            Action(action="icongroup", entity="food", version=1),
+            Action(action="iconset", entity="coffee", version=1),
+            Action(action="iconset", entity="coffee", version=1),
+        ]:
+            assert len(action.pack().encode()) <= 64
+            callback = CallbackQuery(
+                id="synthetic-icon",
+                from_user=user,
+                chat_instance="test",
+                message=message,
+                data=action.pack(),
+            ).as_(bot)
+            await handle_callback(callback, action, client, "https://example.com")
+            if action.action == "icongroup":
+                result = session.sent[-1]
+                assert isinstance(result, SendMessage)
+                assert isinstance(result.reply_markup, InlineKeyboardMarkup)
+                assert any(
+                    "☕" in button.text
+                    for row in result.reply_markup.inline_keyboard
+                    for button in row
+                )
+                assert any(
+                    "✓" in button.text
+                    for row in result.reply_markup.inline_keyboard
+                    for button in row
+                )
+    assert len(mutations) == 1
+    assert item["icon"] == "coffee"
+    assert session.sent[-1].text == COPY[language]["stale"]
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+@pytest.mark.parametrize(
+    "kind,in_use", [("categories", False), ("categories", True), ("expenses", False)]
+)
+async def test_inline_deletion_requires_confirmation_and_preserves_used_categories(
+    language: str, kind: str, in_use: bool
+) -> None:
+    entity_id = "00000000-0000-0000-0000-000000000043"
+    item = {
+        "id": entity_id,
+        "name": "Custom",
+        "code": None,
+        "icon": "tags",
+        "archived": False,
+        "version": 7,
+    }
+    expense = {
+        "id": entity_id,
+        "amount": "12.50",
+        "currency": "UAH",
+        "description": "Lunch",
+        "date": "2026-11-02",
+        "categoryId": entity_id,
+        "source": "bot",
+        "version": 7,
+    }
+    conversation = {"state": "idle", "entityId": None, "field": None, "version": 0}
+    removed = False
+    delete_calls = 0
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        nonlocal removed, delete_calls
+        path = request.url.path
+        if path.endswith("/profile"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "aiConsent": False,
+                    "inputMode": "manual",
+                    "version": 1,
+                    "today": "2026-11-02",
+                },
+            )
+        if path.endswith("/catalog"):
+            return httpx.Response(
+                200, json={"categories": [] if removed and kind == "categories" else [item]}
+            )
+        if path.endswith("/conversation"):
+            if request.method == "PUT":
+                payload = json.loads(request.content)
+                conversation.update(payload)
+                conversation["version"] = payload["version"] + 1
+            return httpx.Response(200, json=conversation)
+        if path.endswith("/expenses"):
+            return httpx.Response(
+                200, json={"items": [] if removed else [expense], "page": 0, "hasMore": False}
+            )
+        assert path.endswith(f"/{kind}/{entity_id}")
+        if request.method == "GET":
+            return (
+                httpx.Response(404, json={"code": "not_found"})
+                if removed
+                else httpx.Response(200, json=expense)
+            )
+        assert request.method == "DELETE"
+        assert request.url.params["version"] == "7"
+        delete_calls += 1
+        if in_use:
+            return httpx.Response(422, json={"code": "category_in_use"})
+        removed = True
+        return httpx.Response(204)
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    user = User(id=42, is_bot=False, first_name="Synthetic", language_code=language)
+    message = Message(message_id=1, date=datetime.now(UTC), chat=Chat(id=42, type="private")).as_(
+        bot
+    )
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        api = Api(client, 42, language)
+        if kind == "categories":
+            await catalogs(message, api, COPY[language])
+        else:
+            await browse(message, api, COPY[language])
+        listing = session.sent[-1]
+        assert isinstance(listing, SendMessage)
+        assert isinstance(listing.reply_markup, InlineKeyboardMarkup)
+        first_row = listing.reply_markup.inline_keyboard[0]
+        assert len(first_row) == 2
+        assert first_row[1].callback_data is not None
+        deletion = Action.unpack(first_row[1].callback_data)
+        assert deletion.action == ("catdelete" if kind == "categories" else "delete")
+        assert deletion.version == 7
+        assert all(
+            Action.unpack(button.callback_data or "").action != "archive"
+            for row in listing.reply_markup.inline_keyboard
+            for button in row
+        )
+
+        async def click(action: Action) -> None:
+            assert len(action.pack().encode()) <= 64
+            callback = CallbackQuery(
+                id="synthetic-delete",
+                from_user=user,
+                chat_instance="test",
+                message=message,
+                data=action.pack(),
+            ).as_(bot)
+            await handle_callback(callback, action, client, "https://example.com")
+
+        await click(deletion)
+        assert delete_calls == 0
+        confirmation = session.sent[-1]
+        assert isinstance(confirmation, SendMessage)
+        assert isinstance(confirmation.reply_markup, InlineKeyboardMarkup)
+        confirm, cancel = confirmation.reply_markup.inline_keyboard[0]
+        assert confirm.callback_data is not None and cancel.callback_data is not None
+        await click(Action.unpack(cancel.callback_data))
+        assert delete_calls == 0
+        await click(Action.unpack(confirm.callback_data))
+        assert delete_calls == 1
+        assert removed == (not in_use)
+        if in_use:
+            assert session.sent[-1].text == COPY[language]["categoryInUse"]
+        else:
+            await click(Action.unpack(confirm.callback_data))
+            assert delete_calls == 1
+            assert session.sent[-1].text == COPY[language]["stale"]
+    await bot.session.close()
+
+
+async def test_inline_category_actions_paginate_full_catalog_within_telegram_button_limit() -> None:
+    items = [
+        {
+            "id": f"00000000-0000-0000-0000-{index:012d}",
+            "name": f"Category {index}",
+            "code": None,
+            "archived": False,
+            "version": 1,
+        }
+        for index in range(50)
+    ]
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/catalog")
+        return httpx.Response(200, json={"categories": items})
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    message = Message(message_id=1, date=datetime.now(UTC), chat=Chat(id=42, type="private")).as_(
+        bot
+    )
+    seen = []
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+        for page in range(3):
+            await catalogs(message, Api(client, 42), COPY["uk"], page)
+            result = session.sent[-1]
+            assert isinstance(result, SendMessage)
+            assert isinstance(result.reply_markup, InlineKeyboardMarkup)
+            actions = [
+                Action.unpack(button.callback_data or "")
+                for row in result.reply_markup.inline_keyboard
+                for button in row
+            ]
+            assert len(actions) <= 100
+            seen.extend(action.entity for action in actions if action.action == "catdelete")
+    assert len(seen) == len(set(seen)) == 50
+    await bot.session.close()
+
+
+@pytest.mark.parametrize("language", ["uk", "en"])
+async def test_category_limit_currency_amount_progress_clear_and_stale_callbacks(
+    language: str,
+) -> None:
+    entity_id = "00000000-0000-0000-0000-000000000043"
+    item = {
+        "id": entity_id,
+        "name": "Custom",
+        "code": None,
+        "icon": "tags",
+        "archived": False,
+        "version": 3,
+        "limit": None,
+    }
+    conversation = {"state": "idle", "entityId": None, "field": None, "version": 0}
+    mutations: list[dict[str, object]] = []
+
+    async def backend(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/profile"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "00000000-0000-0000-0000-000000000042",
+                    "language": language,
+                    "theme": "auto",
+                    "timeZone": "Europe/Kyiv",
+                    "currency": "UAH",
+                    "aiConsent": False,
+                    "inputMode": "manual",
+                    "version": 1,
+                    "today": "2026-11-02",
+                },
+            )
+        if path.endswith("/catalog"):
+            return httpx.Response(200, json={"categories": [item]})
+        if path.endswith("/conversation"):
+            if request.method == "PUT":
+                payload = json.loads(request.content)
+                conversation.update(payload)
+                conversation["version"] = payload["version"] + 1
+            return httpx.Response(200, json=conversation)
+        assert path.endswith(f"/categories/{entity_id}/limit")
+        assert request.method == "PUT"
+        payload = json.loads(request.content)
+        mutations.append(payload)
+        assert payload["version"] == item["version"]
+        if payload["amount"] is None:
+            assert payload["currency"] is None
+            item["limit"] = None
+        else:
+            assert payload["amount"] == "80.00"
+            assert payload["currency"] == "USD"
+            item["limit"] = {
+                "amount": "80",
+                "currency": "USD",
+                "spent": "100",
+                "usedPercent": 125,
+                "exceeded": True,
+                "from": "2026-11-01",
+                "to": "2026-11-30",
+            }
+        item["version"] = payload["version"] + 1
+        return httpx.Response(200, json=item)
+
+    session = FakeTelegram()
+    bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    user = User(id=42, is_bot=False, first_name="Synthetic", language_code=language)
+    message = Message(message_id=1, date=datetime.now(UTC), chat=Chat(id=42, type="private")).as_(
+        bot
+    )
+    async with httpx.AsyncClient(
+        base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
+    ) as client:
+
+        async def click(action: Action) -> None:
+            assert len(action.pack().encode()) <= 64
+            callback = CallbackQuery(
+                id="synthetic-limit",
+                from_user=user,
+                chat_instance="test",
+                message=message,
+                data=action.pack(),
+            ).as_(bot)
+            await handle_callback(callback, action, client, "https://example.com")
+
+        original = Action(
+            action="catlimit", entity=entity_id.replace("-", ""), field="categories", version=3
+        )
+        await click(original)
+        assert conversation["state"] == "category_limit_currency"
+        await click(Action(action="limitcurrency", entity="BTC", version=1))
+        assert not mutations
+        assert session.sent[-1].text == COPY[language]["stale"]
+        await click(Action(action="limitcurrency", entity="USD", version=1))
+        assert conversation["state"] == "category_limit"
+        typed = Message(
+            message_id=2,
+            date=datetime.now(UTC),
+            chat=Chat(id=42, type="private"),
+            from_user=user,
+            text="80,00",
+        ).as_(bot)
+        await handle_message(typed, bot, client, "https://example.com")
+        assert len(mutations) == 1
+        assert conversation["state"] == "idle"
+        assert "125%" in session.sent[-1].text
+        assert "██████████" in session.sent[-1].text
+        assert COPY[language]["limitExceeded"] in session.sent[-1].text
+        assert "100 / 80 USD" in session.sent[-1].text
+        await click(original)
+        assert len(mutations) == 1
+        assert session.sent[-1].text == COPY[language]["stale"]
+        await click(
+            Action(action="catlimit", entity=original.entity, field="categories", version=4)
+        )
+        clear = Action(action="limitclear", entity=original.entity, field="categories", version=4)
+        await click(clear)
+        assert len(mutations) == 2
+        assert item["limit"] is None
+        await click(clear)
+        assert len(mutations) == 2
+        assert session.sent[-1].text == COPY[language]["stale"]
     await bot.session.close()

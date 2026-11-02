@@ -10,18 +10,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field, RootModel
 
 
-class CatalogItemDto(BaseModel):
-    id: UUID
-    name: str
-    code: str | None
-    archived: bool
-    version: int
-
-
 class CatalogRequest(BaseModel):
     name: str
     archived: bool
     version: int
+    icon: str | None = None
 
 
 class ConversationDto(BaseModel):
@@ -167,8 +160,48 @@ class VersionRequest(BaseModel):
     version: int
 
 
-class CatalogDto(BaseModel):
-    categories: list[CatalogItemDto]
+class CategoryIconDto(BaseModel):
+    id: str
+    uk: str
+    en: str
+    symbol: str
+
+
+class CategoryIconGroupDto(BaseModel):
+    id: str
+    uk: str
+    en: str
+    icons: list[CategoryIconDto]
+
+
+class CategoryIconLibraryDto(BaseModel):
+    groups: list[CategoryIconGroupDto]
+
+
+class CategoryLimitDto(BaseModel):
+    amount: str
+    currency: str
+    spent: str
+    usedPercent: float
+    from_: Annotated[date_aliased, Field(alias="from")]
+    to: date_aliased
+    exceeded: bool
+
+
+class CategoryLimitRequest(BaseModel):
+    amount: str | None
+    currency: str | None
+    version: int
+
+
+class CatalogItemDto(BaseModel):
+    id: UUID
+    name: str
+    code: str | None
+    archived: bool
+    version: int
+    icon: str | None = None
+    limit: CategoryLimitDto | None = None
 
 
 class InboxRequest(BaseModel):
@@ -179,3 +212,7 @@ class InboxRequest(BaseModel):
 class ReportDto(BaseModel):
     totals: list[ReportTotal]
     categories: list[ReportRow]
+
+
+class CatalogDto(BaseModel):
+    categories: list[CatalogItemDto]

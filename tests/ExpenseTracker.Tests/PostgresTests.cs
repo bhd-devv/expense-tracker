@@ -24,6 +24,191 @@ public sealed class PostgresFactAttribute : FactAttribute
 
 public sealed class PostgresTests
 {
+    [PostgresFact]
+    public async Task CategoryLimitsUseLocalMonthAndCurrencyAndTrackEditsDeletesAndOlderClients()
+    {
+        var clock = new Clock { Now = new(2026, 11, 30, 22, 30, 0, TimeSpan.Zero) };
+        await using var factory = await Factory(services => services.AddSingleton<TimeProvider>(clock));
+        var telegramId = Random.Shared.NextInt64(1_000_000, 9_000_000_000);
+        using var browser = await Browser(factory, telegramId, clock.Now);
+        using var stranger = await Browser(factory, telegramId + 1, clock.Now);
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var category = catalog.Categories[0];
+        Assert.Null(category.Limit);
+        var path = $"/api/categories/{category.Id}/limit";
+        var input = new CategoryLimitRequest("100", "UAH", category.Version);
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.PutAsJsonAsync(path, input)).StatusCode);
+        var response = await browser.PutAsJsonAsync(path, input);
+        response.EnsureSuccessStatusCode();
+        category = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
+        var limit = category.Limit ?? throw new InvalidOperationException();
+        Assert.Equal(new DateOnly(2026, 12, 1), limit.From);
+        Assert.Equal(new DateOnly(2026, 12, 31), limit.To);
+        Assert.Equal("0", limit.Spent);
+        Assert.Equal(0m, limit.UsedPercent);
+        Assert.Equal(HttpStatusCode.Conflict, (await browser.PutAsJsonAsync(path, input)).StatusCode);
+        foreach (var invalid in new CategoryLimitRequest[]
+        {
+            new("0", "UAH", category.Version), new("-1", "UAH", category.Version),
+            new("0.001", "UAH", category.Version), new("10.5", "JPY", category.Version),
+            new("100", "BTC", category.Version), new(null, "UAH", category.Version)
+        })
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PutAsJsonAsync(path, invalid)).StatusCode);
+
+        async Task<ExpenseDto> Save(string amount, string currency, Guid categoryId, DateOnly day)
+        {
+            var created = await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "", "manual"));
+            created.EnsureSuccessStatusCode();
+            var draft = await created.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+            var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm",
+                new ExpenseInput(amount, currency, categoryId, "Budget sample", day, draft.Version));
+            saved.EnsureSuccessStatusCode();
+            return await saved.Content.ReadFromJsonAsync<ExpenseDto>() ?? throw new InvalidOperationException();
+        }
+        async Task<CategoryLimitDto> Current()
+        {
+            var current = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+            return current.Categories.Single(x => x.Id == category.Id).Limit ?? throw new InvalidOperationException();
+        }
+        var first = await Save("40", "UAH", category.Id, new(2026, 12, 1));
+        await Save("900", "USD", category.Id, new(2026, 12, 1));
+        await Save("200", "UAH", catalog.Categories[1].Id, new(2026, 12, 1));
+        await Save("30", "UAH", category.Id, new(2026, 11, 30));
+        await Save("5", "UAH", category.Id, new(2027, 1, 1));
+        var pending = await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "", "manual"));
+        pending.EnsureSuccessStatusCode();
+        var pendingDraft = await pending.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        (await browser.PutAsJsonAsync($"/api/drafts/{pendingDraft.Id}",
+            new DraftEditRequest("5000", "UAH", "Pending", category.Id, new(2026, 12, 1), pendingDraft.Version))).EnsureSuccessStatusCode();
+        Assert.Equal("40", (await Current()).Spent);
+        Assert.Equal(40m, (await Current()).UsedPercent);
+        var last = await Save("85", "UAH", category.Id, new(2026, 12, 31));
+        limit = await Current();
+        Assert.Equal("125", limit.Spent);
+        Assert.Equal(125m, limit.UsedPercent);
+        Assert.True(limit.Exceeded);
+        (await browser.PutAsJsonAsync($"/api/expenses/{last.Id}", new ExpenseInput("70", "UAH", category.Id,
+            last.Description, last.Date, last.Version))).EnsureSuccessStatusCode();
+        Assert.Equal("110", (await Current()).Spent);
+        (await browser.DeleteAsync($"/api/expenses/{first.Id}?version={first.Version}")).EnsureSuccessStatusCode();
+        limit = await Current();
+        Assert.Equal("70", limit.Spent);
+        Assert.False(limit.Exceeded);
+
+        // An older rename/icon client omits all budget fields and must preserve the limit.
+        response = await browser.PutAsJsonAsync($"/api/categories/{category.Id}",
+            new CatalogRequest(category.Name, category.Archived, category.Version, "coffee"));
+        response.EnsureSuccessStatusCode();
+        category = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
+        Assert.Equal(limit, category.Limit);
+        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
+        (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme,
+            profile.TimeZone, "USD", profile.AiConsent, profile.Version))).EnsureSuccessStatusCode();
+        Assert.Equal("UAH", (await Current()).Currency);
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        response = await bot.PutAsJsonAsync($"/internal/bot/actor/categories/{category.Id}/limit",
+            new CategoryLimitRequest("1000", "USD", category.Version));
+        response.EnsureSuccessStatusCode();
+        category = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("900", (await Current()).Spent);
+        Assert.Equal(90m, (await Current()).UsedPercent);
+        clock.Now = new(2026, 12, 31, 22, 30, 0, TimeSpan.Zero);
+        using var january = await Browser(factory, telegramId, clock.Now);
+        var nextCatalog = await january.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        limit = nextCatalog.Categories.Single(x => x.Id == category.Id).Limit ?? throw new InvalidOperationException();
+        Assert.Equal(new DateOnly(2027, 1, 1), limit.From);
+        Assert.Equal("0", limit.Spent);
+        response = await january.PutAsJsonAsync(path, new CategoryLimitRequest(null, null, category.Version));
+        response.EnsureSuccessStatusCode();
+        Assert.Null((await response.Content.ReadFromJsonAsync<CatalogItemDto>())?.Limit);
+    }
+
+    [PostgresFact]
+    public async Task CategoryDeletionChecksOwnershipVersionAndReferencesWithoutChangingExpenses()
+    {
+        await using var factory = await Factory();
+        var telegramId = Random.Shared.NextInt64(1_000_000, 9_000_000_000);
+        using var browser = await Browser(factory, telegramId);
+        using var stranger = await Browser(factory, telegramId + 1);
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var category = catalog.Categories[0];
+        var path = $"/api/categories/{category.Id}";
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.DeleteAsync($"{path}?version={category.Version}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await browser.DeleteAsync($"{path}?version={category.Version - 1}")).StatusCode);
+
+        var created = await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "", "manual"));
+        created.EnsureSuccessStatusCode();
+        var draft = await created.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        var edited = await browser.PutAsJsonAsync($"/api/drafts/{draft.Id}",
+            new DraftEditRequest("12.50", "UAH", "Lunch", category.Id, draft.Date, draft.Version));
+        edited.EnsureSuccessStatusCode();
+        draft = await edited.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        var blocked = await browser.DeleteAsync($"{path}?version={category.Version}");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, blocked.StatusCode);
+        Assert.Contains("category_in_use", await blocked.Content.ReadAsStringAsync());
+
+        var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm",
+            new ExpenseInput("12.50", "UAH", category.Id, "Lunch", draft.Date, draft.Version));
+        saved.EnsureSuccessStatusCode();
+        var expense = await saved.Content.ReadFromJsonAsync<ExpenseDto>() ?? throw new InvalidOperationException();
+        var report = await browser.GetStringAsync("/api/reports");
+        blocked = await browser.DeleteAsync($"{path}?version={category.Version}");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, blocked.StatusCode);
+        Assert.Contains("category_in_use", await blocked.Content.ReadAsStringAsync());
+        Assert.Equal(expense, await browser.GetFromJsonAsync<ExpenseDto>($"/api/expenses/{expense.Id}"));
+        Assert.Equal(report, await browser.GetStringAsync("/api/reports"));
+
+        (await browser.DeleteAsync($"/api/expenses/{expense.Id}?version={expense.Version}")).EnsureSuccessStatusCode();
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        Assert.Equal(HttpStatusCode.NoContent, (await bot.DeleteAsync($"/internal/bot/actor/categories/{category.Id}?version={category.Version}")).StatusCode);
+        catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        Assert.DoesNotContain(catalog.Categories, item => item.Id == category.Id);
+        Assert.Equal(HttpStatusCode.NotFound, (await browser.DeleteAsync($"{path}?version={category.Version}")).StatusCode);
+    }
+
+    [PostgresFact]
+    public async Task CategoryIconChangesPreserveNamesAndRespectOwnershipVersionsAndOlderClients()
+    {
+        await using var factory = await Factory();
+        var telegramId = Random.Shared.NextInt64(1_000_000, 9_000_000_000);
+        using var browser = await Browser(factory, telegramId);
+        using var stranger = await Browser(factory, telegramId + 1);
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var original = catalog.Categories.First(item => item.Code == "food");
+        Assert.Equal("utensils-crossed", original.Icon);
+        var input = new CatalogRequest(original.Name, original.Archived, original.Version, "coffee");
+        var response = await browser.PutAsJsonAsync($"/api/categories/{original.Id}", input);
+        response.EnsureSuccessStatusCode();
+        var updated = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
+        Assert.Equal(original.Code, updated.Code);
+        Assert.Equal(original.Name, updated.Name);
+        Assert.Equal("coffee", updated.Icon);
+        Assert.Equal(HttpStatusCode.Conflict, (await browser.PutAsJsonAsync($"/api/categories/{original.Id}", input)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.PutAsJsonAsync($"/api/categories/{original.Id}", input with { Version = updated.Version })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PutAsJsonAsync($"/api/categories/{original.Id}",
+            input with { Version = updated.Version, Icon = "<svg>" })).StatusCode);
+        // Renaming/archiving from an older client omits icon and must preserve the selected one.
+        response = await browser.PutAsJsonAsync($"/api/categories/{original.Id}", new CatalogRequest("My coffee", true, updated.Version));
+        response.EnsureSuccessStatusCode();
+        updated = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
+        Assert.Equal("coffee", updated.Icon);
+        Assert.Null(updated.Code);
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        var shared = await bot.GetFromJsonAsync<CatalogDto>("/internal/bot/actor/catalog") ?? throw new InvalidOperationException();
+        Assert.Equal(updated, shared.Categories.First(item => item.Id == original.Id));
+        var library = await bot.GetFromJsonAsync<CategoryIconLibraryDto>("/internal/bot/actor/category-icons") ?? throw new InvalidOperationException();
+        Assert.Contains(library.Groups.SelectMany(group => group.Icons), icon => icon.Id == updated.Icon);
+        var created = await browser.PostAsJsonAsync("/api/categories", new CatalogRequest("Cycling", false, 0, "bike"));
+        created.EnsureSuccessStatusCode();
+        Assert.Equal("bike", (await created.Content.ReadFromJsonAsync<CatalogItemDto>())?.Icon);
+    }
+
     private static async Task<WebApplicationFactory<Program>> Factory(Action<IServiceCollection>? configure = null)
     {
         var connection = Environment.GetEnvironmentVariable("EXPENSE_TEST_DATABASE") ?? throw new InvalidOperationException("No test database");

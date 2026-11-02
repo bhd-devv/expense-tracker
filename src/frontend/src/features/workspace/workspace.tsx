@@ -2,17 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Archive,
-  ArchiveRestore,
-  CarFront,
   ChartPie,
-  HeartPulse,
   House,
   PencilLine,
   ReceiptText,
-  ShoppingBag,
-  Ticket,
-  UtensilsCrossed,
   ArrowUpRight,
   Check,
   ChevronLeft,
@@ -27,9 +20,9 @@ import {
   Settings2,
   Square,
   Tags,
+  Trash2,
   SlidersHorizontal,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import { z } from "zod";
 import {
@@ -61,6 +54,12 @@ import {
   type Language,
 } from "@/lib/i18n";
 import { telegram } from "@/lib/telegram";
+import {
+  CategoryIcon,
+  categoryIconId,
+} from "@/features/categories/category-icon";
+import IconPicker from "@/features/categories/icon-picker";
+import CategoryLimit from "@/features/categories/category-limit";
 
 type Tab = "overview" | "expenses" | "reports" | "categories" | "settings";
 type Editor =
@@ -79,20 +78,6 @@ const nav = [
   { key: "categories", Icon: Tags },
   { key: "settings", Icon: Settings2 },
 ] as const;
-const categoryIcons: Record<string, LucideIcon> = {
-  food: UtensilsCrossed,
-  transport: CarFront,
-  shopping: ShoppingBag,
-  home: House,
-  health: HeartPulse,
-  leisure: Ticket,
-  other: ReceiptText,
-};
-function CategoryIcon({ code }: { code?: string | null }) {
-  const Icon =
-    code && Object.hasOwn(categoryIcons, code) ? categoryIcons[code] : Tags;
-  return <Icon size={22} strokeWidth={1.8} aria-hidden="true" />;
-}
 function Money({
   amount,
   currency,
@@ -117,6 +102,7 @@ function errorText(error: unknown, t: Copy) {
   if (error.status === 401) return t.signInBody;
   if (error.status === 429) return t.rateLimit;
   if (error.code === "draft_expired") return t.expired;
+  if (error.code === "category_in_use") return t.categoryInUse;
   if (error.status === 409) return t.conflict;
   if (error.code === "ai_consent_required") return t.consentNeeded;
   return error.status >= 500 ? t.connection : t.invalid;
@@ -370,6 +356,18 @@ export default function Workspace() {
       setEditor(undefined);
     });
   }
+  async function deleteExpense(expense: Expense) {
+    if (!window.confirm(`${t.confirmDelete}\n${expense.description}`)) return;
+    await action(async () => {
+      await request(
+        `/expenses/${expense.id}?version=${expense.version}`,
+        nothing,
+        "DELETE",
+      );
+      setNotice(t.deleted);
+      await load();
+    });
+  }
   if (!profile)
     return (
       <main className="auth-page">
@@ -529,7 +527,7 @@ export default function Workspace() {
             </div>
           </div>
         ) : (
-          <>
+          <div className="workspace-view" key={tab}>
             {tab === "overview" && (
               <>
                 <div className="overview-grid">
@@ -748,7 +746,10 @@ export default function Workspace() {
                           <div className="expense-row" key={expense.id}>
                             <div className="expense-description">
                               <span className="category-icon">
-                                <CategoryIcon code={cat?.code} />
+                                <CategoryIcon
+                                  icon={cat?.icon}
+                                  code={cat?.code}
+                                />
                               </span>
                               <div>
                                 <strong>{expense.description}</strong>
@@ -780,15 +781,36 @@ export default function Workspace() {
                                 lang={lang}
                               />
                             </strong>
-                            <button
-                              className="icon-button"
-                              aria-label={`${t.edit}: ${expense.description}`}
-                              onClick={() =>
-                                setEditor({ kind: "expense", value: expense })
-                              }
-                            >
-                              <PencilLine size={20} strokeWidth={1.8} />
-                            </button>
+                            <div className="record-actions">
+                              <button
+                                className="icon-button"
+                                aria-label={`${t.edit}: ${expense.description}`}
+                                title={t.edit}
+                                disabled={busy}
+                                onClick={() =>
+                                  setEditor({ kind: "expense", value: expense })
+                                }
+                              >
+                                <PencilLine
+                                  size={20}
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                />
+                              </button>
+                              <button
+                                className="icon-button danger"
+                                aria-label={`${t.remove}: ${expense.description}`}
+                                title={t.remove}
+                                disabled={busy}
+                                onClick={() => void deleteExpense(expense)}
+                              >
+                                <Trash2
+                                  size={20}
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -861,7 +883,11 @@ export default function Workspace() {
                         return (
                           <div className="report-row" key={row.categoryId}>
                             <div>
-                              <span>
+                              <span className="report-category">
+                                <CategoryIcon
+                                  icon={category?.icon}
+                                  code={category?.code}
+                                />
                                 {category ? categoryName(category, t) : "—"}
                               </span>
                               <strong>
@@ -885,6 +911,8 @@ export default function Workspace() {
               <CatalogEditor
                 key={tab}
                 items={data.catalog.categories}
+                defaultCurrency={profile.currency}
+                lang={lang}
                 t={t}
                 busy={busy}
                 perform={action}
@@ -918,7 +946,7 @@ export default function Workspace() {
                 }
               />
             )}
-          </>
+          </div>
         )}
       </main>
       {editor && catalog && (
@@ -930,19 +958,6 @@ export default function Workspace() {
           error={fault}
           onSave={saveEditor}
           onCancel={cancelEditor}
-          onDelete={() => {
-            if (editor.kind === "expense" && window.confirm(t.confirmDelete))
-              void action(async () => {
-                await request(
-                  `/expenses/${editor.value.id}?version=${editor.value.version}`,
-                  nothing,
-                  "DELETE",
-                );
-                setEditor(undefined);
-                setNotice(t.deleted);
-                await load();
-              });
-          }}
         />
       )}
     </div>
@@ -967,7 +982,6 @@ function ExpenseEditor({
   error,
   onSave,
   onCancel,
-  onDelete,
 }: {
   editor: Editor;
   catalog: Catalog;
@@ -976,7 +990,6 @@ function ExpenseEditor({
   error: string;
   onSave: (input: ExpenseInput) => Promise<void>;
   onCancel: () => Promise<void>;
-  onDelete: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [value, setValue] = useState({
@@ -1115,16 +1128,6 @@ function ExpenseEditor({
           </details>
         )}
         <div className="dialog-actions">
-          {editor.kind === "expense" && (
-            <button
-              type="button"
-              disabled={busy}
-              className="quiet danger"
-              onClick={onDelete}
-            >
-              {t.remove}
-            </button>
-          )}
           <button
             type="button"
             disabled={busy}
@@ -1148,32 +1151,63 @@ function ExpenseEditor({
 }
 function CatalogEditor({
   items,
+  defaultCurrency,
+  lang,
   t,
   busy,
   perform,
   reload,
 }: {
   items: Item[];
+  defaultCurrency: string;
+  lang: Language;
   t: Copy;
   busy: boolean;
   perform: (fn: () => Promise<void>) => Promise<void>;
   reload: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState<Item>();
+  const [editName, setEditName] = useState("");
+  const editInput = useRef<HTMLInputElement>(null);
+  const editTriggerId = useRef<string | undefined>(undefined);
   const [name, setName] = useState("");
+  const [icon, setIcon] = useState("tags");
+  const [picker, setPicker] = useState<
+    { kind: "form" } | { kind: "category"; item: Item }
+  >();
+  const editingId = editing?.id;
+  useEffect(() => {
+    if (editingId) {
+      editInput.current?.focus();
+      editInput.current?.select();
+    }
+  }, [editingId]);
+  useEffect(() => {
+    if (!editingId && !busy && editTriggerId.current) {
+      document.getElementById(editTriggerId.current)?.focus();
+      editTriggerId.current = undefined;
+    }
+  }, [editingId, busy]);
   async function submit() {
     await perform(async () => {
-      await request(
-        `/categories${editing ? `/${editing.id}` : ""}`,
-        itemSchema,
-        editing ? "PUT" : "POST",
-        {
-          name,
-          archived: editing?.archived ?? false,
-          version: editing?.version ?? 0,
-        },
-      );
+      await request("/categories", itemSchema, "POST", {
+        name,
+        icon,
+        archived: false,
+        version: 0,
+      });
       setName("");
+      setIcon("tags");
+      await reload();
+    });
+  }
+  async function rename() {
+    if (!editing) return;
+    await perform(async () => {
+      await request(`/categories/${editing.id}`, itemSchema, "PUT", {
+        ...editing,
+        name: editName === categoryName(editing, t) ? editing.name : editName,
+      });
       setEditing(undefined);
       await reload();
     });
@@ -1181,50 +1215,138 @@ function CatalogEditor({
   return (
     <div className="catalog-layout">
       <section className="panel">
+        {!items.length && <p className="empty">{t.emptyCategories}</p>}
         {items.map((item) => (
-          <div className="catalog-row" key={item.id}>
-            <div className="catalog-name">
-              <span className="category-icon">
-                <CategoryIcon code={item.code} />
-              </span>
-              <div>
-                <strong>{categoryName(item, t)}</strong>
-                {item.archived && <small>{t.archived}</small>}
-              </div>
-            </div>
-            <button
-              className="icon-button"
-              aria-label={`${t.rename}: ${categoryName(item, t)}`}
-              title={t.rename}
-              disabled={busy}
-              onClick={() => {
-                setEditing(item);
-                setName(categoryName(item, t));
+          <div className="catalog-item" key={item.id}>
+            <form
+              className="catalog-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (editing?.id === item.id) void rename();
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Escape" &&
+                  editing?.id === item.id &&
+                  !busy
+                ) {
+                  event.preventDefault();
+                  setEditing(undefined);
+                }
               }}
             >
-              <PencilLine size={20} strokeWidth={1.8} />
-            </button>
-            <button
-              className="icon-button"
-              aria-label={`${item.archived ? t.restore : t.archive}: ${categoryName(item, t)}`}
-              title={item.archived ? t.restore : t.archive}
-              disabled={busy}
-              onClick={() =>
-                void perform(async () => {
-                  await request(`/categories/${item.id}`, itemSchema, "PUT", {
-                    ...item,
-                    archived: !item.archived,
-                  });
-                  await reload();
-                })
-              }
-            >
-              {item.archived ? (
-                <ArchiveRestore size={20} strokeWidth={1.8} />
-              ) : (
-                <Archive size={20} strokeWidth={1.8} />
-              )}
-            </button>
+              <div className="catalog-name">
+                <button
+                  type="button"
+                  className="category-icon category-icon-edit"
+                  aria-label={`${t.chooseIcon}: ${categoryName(item, t)}`}
+                  title={t.chooseIcon}
+                  disabled={busy}
+                  onClick={() => setPicker({ kind: "category", item })}
+                >
+                  <CategoryIcon icon={item.icon} code={item.code} />
+                </button>
+                <div>
+                  {editing?.id === item.id ? (
+                    <input
+                      ref={editInput}
+                      className="category-name-input"
+                      aria-label={`${t.name}: ${categoryName(item, t)}`}
+                      required
+                      maxLength={60}
+                      value={editName}
+                      disabled={busy}
+                      onChange={(event) => setEditName(event.target.value)}
+                    />
+                  ) : (
+                    <strong>{categoryName(item, t)}</strong>
+                  )}
+                  {item.archived && <small>{t.archived}</small>}
+                </div>
+              </div>
+              <div className="record-actions">
+                {editing?.id === item.id ? (
+                  <>
+                    <button
+                      type="submit"
+                      className="icon-button"
+                      aria-label={`${t.update}: ${categoryName(item, t)}`}
+                      title={t.update}
+                      disabled={busy}
+                    >
+                      <Check size={20} strokeWidth={1.8} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={t.cancel}
+                      title={t.cancel}
+                      disabled={busy}
+                      onClick={() => setEditing(undefined)}
+                    >
+                      <X size={20} strokeWidth={1.8} aria-hidden="true" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      id={`category-edit-${item.id}`}
+                      className="icon-button"
+                      aria-label={`${t.rename}: ${categoryName(item, t)}`}
+                      title={t.rename}
+                      disabled={busy}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        editTriggerId.current = `category-edit-${item.id}`;
+                        setEditing(item);
+                        setEditName(categoryName(item, t));
+                      }}
+                    >
+                      <PencilLine size={20} strokeWidth={1.8} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      aria-label={`${t.remove}: ${categoryName(item, t)}`}
+                      title={t.remove}
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `${t.confirmDeleteCategory}\n${categoryName(item, t)}`,
+                          )
+                        )
+                          return;
+                        void perform(async () => {
+                          await request(
+                            `/categories/${item.id}?version=${item.version}`,
+                            nothing,
+                            "DELETE",
+                          );
+                          await reload();
+                        });
+                      }}
+                    >
+                      <Trash2 size={20} strokeWidth={1.8} aria-hidden="true" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </form>
+            <CategoryLimit
+              item={item}
+              defaultCurrency={defaultCurrency}
+              currencies={currencies}
+              lang={lang}
+              t={t}
+              busy={busy}
+              perform={perform}
+              onSaved={async (updated) => {
+                if (editing?.id === updated.id) setEditing(updated);
+                await reload();
+              }}
+            />
           </div>
         ))}
       </section>
@@ -1235,7 +1357,16 @@ function CatalogEditor({
           void submit();
         }}
       >
-        <h2>{editing ? t.edit : t.create}</h2>
+        <h2>{t.create}</h2>
+        <button
+          type="button"
+          className="button secondary category-icon-trigger"
+          disabled={busy}
+          onClick={() => setPicker({ kind: "form" })}
+        >
+          <CategoryIcon icon={icon} />
+          <span>{t.chooseIcon}</span>
+        </button>
         <label>
           {t.name}
           <input
@@ -1247,24 +1378,49 @@ function CatalogEditor({
           />
         </label>
         <div className="dialog-actions">
-          {editing && (
-            <button
-              className="quiet"
-              type="button"
-              onClick={() => {
-                setEditing(undefined);
-                setName("");
-              }}
-            >
-              {t.cancel}
-            </button>
-          )}
           <button disabled={busy} className="button primary">
-            {editing ? <Check size={20} /> : <Plus size={20} />}
-            {editing ? t.update : t.create}
+            <Plus size={20} />
+            {t.create}
           </button>
         </div>
       </form>
+      {picker && (
+        <IconPicker
+          value={
+            picker.kind === "category"
+              ? categoryIconId(picker.item.icon, picker.item.code)
+              : icon
+          }
+          title={
+            picker.kind === "category"
+              ? categoryName(picker.item, t)
+              : name || t.categories
+          }
+          lang={lang}
+          t={t}
+          onClose={() => setPicker(undefined)}
+          onSelect={(selected) => {
+            setPicker(undefined);
+            if (picker.kind === "form") {
+              setIcon(selected);
+              return;
+            }
+            const item = picker.item;
+            void perform(async () => {
+              const updated = await request(
+                `/categories/${item.id}`,
+                itemSchema,
+                "PUT",
+                { ...item, icon: selected },
+              );
+              if (editing?.id === updated.id) {
+                setEditing(updated);
+              }
+              await reload();
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

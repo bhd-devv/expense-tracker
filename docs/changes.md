@@ -3,6 +3,11 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 026 — [Оновлений вигляд і плавний рух Mini App](../.agents/changelog/026-interface-polish.md)
+- 025 — [Місячні ліміти категорій і смужки використання](../.agents/changelog/025-category-monthly-limits.md)
+- 024 — [Редагування назви категорії безпосередньо в рядку](../.agents/changelog/024-inline-category-rename.md)
+- 023 — [Видалення категорій і витрат поряд із записами](../.agents/changelog/023-inline-category-expense-deletion.md)
+- 022 — [Каталог і зручна зміна іконок категорій](../.agents/changelog/022-category-icons.md)
 - 021 — [Ручне й AI-введення витрат та явна дата](../.agents/changelog/021-manual-ai-expense-entry.md)
 - 020 — [Категорії та налаштування в нижній навігації](../.agents/changelog/020-bottom-navigation-direct-sections.md)
 - 019 — [Витрати без фінансових рахунків](../.agents/changelog/019-expenses-without-accounts.md)

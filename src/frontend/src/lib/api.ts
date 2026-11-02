@@ -20,9 +20,41 @@ export const itemSchema: z.ZodType<components["schemas"]["CatalogItemDto"]> =
     id,
     name: z.string(),
     code: z.string().nullable(),
+    icon: z.string().nullable().default(null),
+    limit: z
+      .object({
+        amount: z.string(),
+        currency: z.string(),
+        spent: z.string(),
+        usedPercent: z.number().nonnegative(),
+        exceeded: z.boolean(),
+        from: z.string(),
+        to: z.string(),
+      })
+      .nullable()
+      .default(null),
     archived: z.boolean(),
     version: z.number().int(),
   });
+export const iconLibrarySchema: z.ZodType<
+  components["schemas"]["CategoryIconLibraryDto"]
+> = z.object({
+  groups: z.array(
+    z.object({
+      id: z.string(),
+      uk: z.string(),
+      en: z.string(),
+      icons: z.array(
+        z.object({
+          id: z.string(),
+          uk: z.string(),
+          en: z.string(),
+          symbol: z.string(),
+        }),
+      ),
+    }),
+  ),
+});
 export const catalogSchema: z.ZodType<components["schemas"]["CatalogDto"]> =
   z.object({
     categories: z.array(itemSchema),

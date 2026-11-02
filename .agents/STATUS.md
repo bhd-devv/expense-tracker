@@ -6,6 +6,30 @@
 
 ## Активна робота
 
+Локальне [візуальне оновлення Mini App](tasks/interface-polish-2026-11-02/README.md)
+завершено: спільні visual/motion tokens, оновлені поверхні й контролі,
+плавна поява вкладок/діалогів/списків і progress, reduced motion.
+Browser/Telegram, build/typecheck та візуальне QA ще не запускалися.
+
+Локальні [місячні ліміти категорій](tasks/category-limits-2026-11-02/README.md)
+реалізовані в backend, Mini App і боті: сума/валюта, прогрес, відсоток і
+прибирання ліміту. Міграція `AddCategoryLimits` підготовлена, не застосована;
+build/tests/typecheck/browser/PostgreSQL/Telegram/Coolify не запускалися.
+
+[Редагування назви категорії у її рядку](changelog/024-inline-category-rename.md)
+реалізовано локально: поле, збереження/скасування й Enter/Escape поруч із
+категорією. Build/typecheck і браузерна поведінка не перевірялися.
+
+Локальні зміни [видалення в рядках списків](tasks/inline-delete-2026-11-02/README.md)
+завершені: категорії та витрати мають сусідні дії редагування/видалення;
+архівацію прибрано з UI. DELETE категорій захищає пов'язані витрати й
+активні чернетки. Нової міграції немає; runtime перевірки не запускалися.
+
+Локальні зміни [каталогу іконок категорій](tasks/category-icons-2026-11-02/README.md)
+завершені: 100 іконок у Mini App і боті, additive migration `AddCategoryIcons`.
+Міграція не застосована; build, тести, typecheck, browser і реальний Telegram
+очікують окремого запиту користувача.
+
 Локальні зміни [ручного/AI-введення](tasks/manual-ai-input-2026-11-02/README.md)
 завершені. Підготовлено additive migration `AddInputMode`; build, тести,
 browser та реальні Telegram/OpenRouter перевірки очікують окремого запиту.

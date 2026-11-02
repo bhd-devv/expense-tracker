@@ -47,6 +47,16 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                     b.Property<string>("Code")
                         .HasColumnType("text");
 
+                    b.Property<string>("Icon")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LimitCurrency")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("MonthlyLimit")
+                        .HasPrecision(20, 4)
+                        .HasColumnType("numeric(20,4)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -60,7 +70,10 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", t =>
+                        {
+                            t.HasCheckConstraint("valid_category_limit", "(\"MonthlyLimit\" IS NULL AND \"LimitCurrency\" IS NULL) OR (\"MonthlyLimit\" IS NOT NULL AND \"MonthlyLimit\" > 0 AND \"LimitCurrency\" IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Conversation", b =>

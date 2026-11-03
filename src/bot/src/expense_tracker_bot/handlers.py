@@ -76,6 +76,7 @@ def menu(t: dict[str, str]) -> ReplyKeyboardMarkup:
             [KeyboardButton(text=t["add"]), KeyboardButton(text=t["expenses"])],
             [KeyboardButton(text=t["reports"]), KeyboardButton(text=t["categories"])],
             [KeyboardButton(text=t["savings"])],
+            [KeyboardButton(text=t["tasks"])],
             [KeyboardButton(text=t["settings"]), KeyboardButton(text=t["app"])],
         ],
         resize_keyboard=True,
@@ -83,9 +84,9 @@ def menu(t: dict[str, str]) -> ReplyKeyboardMarkup:
     )
 
 
-def app_keyboard(t: dict[str, str], url: str) -> InlineKeyboardMarkup:
+def app_keyboard(t: dict[str, str], url: str, label: str = "app") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=t["app"], web_app=WebAppInfo(url=url))]]
+        inline_keyboard=[[InlineKeyboardButton(text=t[label], web_app=WebAppInfo(url=url))]]
     )
 
 
@@ -561,6 +562,7 @@ async def handle_message(
                     "reports",
                     "categories",
                     "savings",
+                    "tasks",
                     "settings",
                     "app",
                 )
@@ -582,6 +584,11 @@ async def handle_message(
                 await settings(message, api, profile, t)
             elif selected == "app":
                 await message.answer(t["openAppPrompt"], reply_markup=app_keyboard(t, app_url))
+            elif selected == "tasks":
+                await message.answer(
+                    t["openTasksPrompt"],
+                    reply_markup=app_keyboard(t, app_url.rstrip("/") + "/tasks", "tasks"),
+                )
             elif selected == "add" and profile.inputMode == "manual":
                 draft = await api.mutate(
                     "POST",

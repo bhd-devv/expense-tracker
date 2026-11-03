@@ -298,3 +298,28 @@ Image rollback залишає нові таблиці. Down навмисно в�
 фінансового журналу; дані не можна прибирати як частину звичайного rollback.
 Перед поверненням старого bot image завершіть conversations `savings_*`;
 старі `sv` кнопки потребуватимуть нового відкриття меню.
+
+## Окремий вебзастосунок завдань
+
+`20261103000000_AddRecurringTasks` додає `RecurringTasks` і
+`TaskCompletions`; фінансові таблиці не змінюються. Після backup застосуйте
+міграцію штатним migration job перед новим backend, потім оновіть frontend
+і bot. `/tasks` працює в чинному Next.js image через frontend catch-all;
+`/api/tasks*` — через чинний backend route. Окремих origin, bot token,
+secrets, сервісу чи webhook registration не потрібно.
+
+Reply-пункт «✅ Завдання» надсилає inline `web_app` кнопку на
+`BOT_APP_URL` + `/tasks`. `/start` оновлює меню на пристрої користувача.
+Menu button Lime і старі inline launch далі відкривають витрати.
+У private bot API task endpoints немає.
+
+Перед release за окремим запитом перевірте OpenAPI export/drift,
+Release build/tests, typecheck/lint/build, browser на 320/360/390/430 px
+і desktop у uk/en × light/dark, реальний PostgreSQL із міграцією,
+чужі IDs/CSRF, timezone/DST, конкурентні відмітки, невідому відповідь
+і явний повтор, відмітки незалежних дат та tombstone/create replay.
+Окремо перевірте Telegram inline auth і HTTPS cookie/CSRF через Coolify.
+
+Ці перевірки й застосування міграції ще не виконувались. Image rollback
+зберігає нові таблиці; Down відхилено, щоб не видаляти історію завдань.
+Цей опис не є дозволом на deployment чи застосування міграції.

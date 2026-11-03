@@ -39,6 +39,8 @@ COPY = {
         "limitExceeded": "Limit exceeded",
         "settings": "⚙️ Settings",
         "app": "📱 Open app",
+        "tasks": "✅ Tasks",
+        "openTasksPrompt": "Open your task tracker using the button below.",
         "openAppPrompt": "Open the app using the button below to sign in securely.",
         "welcome": (
             "A little clarity. Every day.\nSend a description or a voice note to add an expense."
@@ -172,6 +174,8 @@ COPY = {
         "limitExceeded": "Ліміт перевищено",
         "settings": "⚙️ Налаштування",
         "app": "📱 Відкрити застосунок",
+        "tasks": "✅ Завдання",
+        "openTasksPrompt": "Відкрийте трекер завдань кнопкою нижче.",
         "openAppPrompt": "Відкрийте застосунок кнопкою нижче для безпечного входу.",
         "welcome": "Трохи ясності. Щодня.\nНадішліть опис або голосове, щоб додати витрату.",
         "prompt": (

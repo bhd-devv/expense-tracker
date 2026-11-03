@@ -23,7 +23,7 @@ public sealed class PostgresFactAttribute : FactAttribute
     }
 }
 
-public sealed class PostgresTests
+public sealed partial class PostgresTests
 {
 
     [PostgresFact]

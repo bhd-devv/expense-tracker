@@ -236,6 +236,41 @@ class SavingsEntryPage(BaseModel):
     hasMore: bool
 
 
+class CreateTaskRequest(BaseModel):
+    requestId: UUID
+    name: str
+    intervalDays: int
+    startDate: date_aliased
+
+
+class RenameTaskRequest(BaseModel):
+    name: str
+    version: int
+
+
+class TaskCompletionRequest(BaseModel):
+    date: date_aliased
+    completed: bool
+    version: int
+
+
+class RecurringTaskDto(BaseModel):
+    id: UUID
+    name: str
+    intervalDays: int
+    startDate: date_aliased
+    version: int
+    isDue: bool
+    completed: bool
+    canComplete: bool
+
+
+class TaskListDto(BaseModel):
+    today: date_aliased
+    date: date_aliased
+    items: list[RecurringTaskDto]
+
+
 class CatalogItemDto(BaseModel):
     id: UUID
     name: str

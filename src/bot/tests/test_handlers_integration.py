@@ -121,7 +121,7 @@ async def test_real_backend_draft_edit_confirm_and_duplicate_callback() -> None:
 
 
 @pytest.mark.parametrize("language", ["uk", "en"])
-@pytest.mark.parametrize("entry", ["menu", "start"])
+@pytest.mark.parametrize("entry", ["menu", "start", "tasks", "old_tasks_language"])
 async def test_app_launch_uses_inline_web_app_and_preserves_reply_menu(
     language: str, entry: str
 ) -> None:
@@ -157,12 +157,19 @@ async def test_app_launch_uses_inline_web_app_and_preserves_reply_menu(
 
     session = FakeTelegram()
     bot = Bot("123456:test-token-used-only-in-local-tests", session=session)
+    text = "/start app"
+    if entry == "menu":
+        text = COPY[language]["app"]
+    elif entry == "tasks":
+        text = COPY[language]["tasks"]
+    elif entry == "old_tasks_language":
+        text = COPY["en" if language == "uk" else "uk"]["tasks"]
     message = Message(
         message_id=1,
         date=datetime.now(UTC),
         chat=Chat(id=42, type="private"),
         from_user=User(id=42, is_bot=False, first_name="Synthetic", language_code=language),
-        text=COPY[language]["app"] if entry == "menu" else "/start app",
+        text=text,
     ).as_(bot)
     async with httpx.AsyncClient(
         base_url="http://backend/internal/bot/", transport=httpx.MockTransport(backend)
@@ -177,11 +184,12 @@ async def test_app_launch_uses_inline_web_app_and_preserves_reply_menu(
     ]
     sent = session.sent[-1]
     assert isinstance(sent, SendMessage)
-    assert sent.text == COPY[language]["openAppPrompt"]
+    tasks = entry in ("tasks", "old_tasks_language")
+    assert sent.text == COPY[language]["openTasksPrompt" if tasks else "openAppPrompt"]
     assert isinstance(sent.reply_markup, InlineKeyboardMarkup)
     launch = sent.reply_markup.inline_keyboard[0][0]
     assert launch.web_app is not None
-    assert launch.web_app.url == "https://example.com"
+    assert launch.web_app.url == "https://example.com" + ("/tasks" if tasks else "")
     if entry == "start":
         assert len(session.sent) == 2
         reply = session.sent[0].reply_markup

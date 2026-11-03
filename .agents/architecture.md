@@ -152,3 +152,24 @@ Expense/Category немає. Деталі — [product](product.md).
 
 Валюта savings DTO завжди з профілю; legacy account/request Currency не
 перевизначає позначення. Це узгоджено зі спільними налаштуваннями валюти.
+
+## Вебзастосунок завдань
+
+Feature `Tasks` обслуговує тільки browser endpoints `/api/tasks`,
+`/api/tasks/{id}` і `/api/tasks/{id}/completion`. Він не входить у
+`MapWorkspace` і не публікується в `/internal/bot/actor`. Frontend — окремий
+App Router route `/tasks` у чинному Next.js image, на тому самому HTTPS
+origin. Окремі сервіси, секрети, domain або другий bot token не потрібні.
+
+`RecurringTasks` містить власника, immutable дату початку/інтервал,
+назву, version і tombstone `Deleted`. `TaskCompletions` має PK
+`(UserId, Date, TaskId)` та composite ownership FK до завдання.
+Owner advisory lock серіалізує читання визначень/відміток і короткі мутації;
+версія змінюється також при відмітці/її прибиранні. DB constraint дозволяє
+тільки інтервали 1/2/3/7. Tombstone резервує request ID після видалення:
+стара спроба створення не відновлює завдання.
+
+Дати й доступність відмітки обчислює backend за `TimeProvider` і timezone
+профілю. Frontend валідує відповіді Zod та показує серверні flags.
+Контракт і клієнтські DTO — у спільній OpenAPI-схемі; згенеровані Python
+моделі не означають наявності bot use case. Межі — [ADR-019](knowledge/decisions.md).

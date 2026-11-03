@@ -364,3 +364,27 @@
 - **Контракти:** [product](../product.md), [architecture](../architecture.md),
   [Telegram](../telegram.md), [deployment](../../docs/deployment.md).
 - **Задача:** [накопичення](../tasks/savings-accounts-2026-11-02/README.md).
+
+## ADR-019: регулярні завдання лише в окремому вебзастосунку
+
+- **Статус:** accepted, 2026-11-03; локальна реалізація, runtime не перевірено.
+- **Контекст:** користувач явно запросив інший Web App із регулярними
+  завданнями й лише кнопкою відкриття в боті. Це виняток із parity витрат.
+- **Варіанти:** другий deployment/domain додав би зайві routing/auth/secrets;
+  bot task CRUD суперечив би прямій вимозі. LocalStorage як основне сховище
+  втрачало б спільність пристроїв і серверну ownership-перевірку.
+- **Рішення:** окремий `/tasks` у чинному Next.js та browser-only .NET
+  feature, спільна перевірена Telegram cookie session/CSRF і PostgreSQL.
+  `RecurringTasks` + `TaskCompletions`, fixed cadence 1/2/3/7 від старту,
+  timezone власника, owner lock, version і composite ownership PK/FK.
+  Перейменування не змінює розклад. Видалення приховує завдання, резервує
+  його ID та зберігає історію без UI відновлення. Створення дедуплікується
+  ID; versioned повтори можуть повернути conflict. Невідома відповідь
+  потребує явної дії з тим самим збереженим запитом, без auto retry.
+- **Наслідки:** additive `AddRecurringTasks` перед backend, потім frontend
+  і bot. Поточні фінансові контракти/таблиці не змінюються. `/start` оновлює
+  reply-кнопки, старі inline launch продовжують відкривати витрати.
+  Image rollback зберігає нові таблиці; Down відхилено для збереження історії.
+- **Контракти:** [product](../product.md), [architecture](../architecture.md),
+  [Telegram](../telegram.md), [deployment](../../docs/deployment.md).
+- **Задача:** [вебзастосунок завдань](../tasks/recurring-tasks-2026-11-03/README.md).

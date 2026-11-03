@@ -56,6 +56,7 @@ import {
   type Language,
 } from "@/lib/i18n";
 import { telegram } from "@/lib/telegram";
+import { applyTheme } from "@/lib/theme";
 import {
   CategoryIcon,
   categoryIconId,
@@ -119,19 +120,6 @@ function errorText(error: unknown, t: Copy) {
   if (error.code === "ai_consent_required") return t.consentNeeded;
   return error.status >= 500 ? t.connection : t.invalid;
 }
-function applyTheme(theme: string) {
-  const app = telegram();
-  const device = matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-  const host = app?.initData ? app.colorScheme : device;
-  document.documentElement.dataset.theme =
-    theme === "dark" || (theme === "auto" && host === "dark")
-      ? "dark"
-      : "light";
-  localStorage.setItem("lime-theme", theme);
-}
-
 export default function Workspace() {
   const [profile, setProfile] = useState<Profile>();
   const [data, setData] = useState<Data>();

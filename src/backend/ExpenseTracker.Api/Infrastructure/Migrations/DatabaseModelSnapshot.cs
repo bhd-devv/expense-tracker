@@ -381,6 +381,32 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.RecurringTask", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
+                    b.Property<int>("IntervalDays").HasColumnType("integer");
+                    b.Property<DateOnly>("StartDate").HasColumnType("date");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<bool>("Deleted").HasColumnType("boolean");
+                    b.Property<int>("Version").IsConcurrencyToken().HasColumnType("integer");
+                    b.HasKey("Id");
+                    b.HasAlternateKey("UserId", "Id");
+                    b.HasIndex("UserId", "Deleted", "CreatedAt", "Id");
+                    b.ToTable("RecurringTasks", t => t.HasCheckConstraint("valid_task_interval", "\"IntervalDays\" IN (1, 2, 3, 7)"));
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.TaskCompletion", b =>
+                {
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.Property<DateOnly>("Date").HasColumnType("date");
+                    b.Property<Guid>("TaskId").HasColumnType("uuid");
+                    b.HasKey("UserId", "Date", "TaskId");
+                    b.HasIndex("UserId", "TaskId");
+                    b.ToTable("TaskCompletions");
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Category", b =>
                 {
                     b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
@@ -436,6 +462,17 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                 {
                     b.HasOne("ExpenseTracker.Api.Infrastructure.SavingsAccount", null).WithMany().HasForeignKey("UserId", "AccountId")
                         .HasPrincipalKey("UserId", "Id").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.RecurringTask", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null).WithMany().HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.TaskCompletion", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.RecurringTask", null).WithMany().HasForeignKey("UserId", "TaskId")
+                        .HasPrincipalKey("UserId", "Id").OnDelete(DeleteBehavior.Cascade).IsRequired();
                 });
 #pragma warning restore 612, 618
         }

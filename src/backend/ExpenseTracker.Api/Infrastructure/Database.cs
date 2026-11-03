@@ -85,6 +85,25 @@ public sealed class SavingsEntry
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+public sealed class RecurringTask
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string Name { get; set; } = "";
+    public int IntervalDays { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public bool Deleted { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public sealed class TaskCompletion
+{
+    public Guid UserId { get; set; }
+    public Guid TaskId { get; set; }
+    public DateOnly Date { get; set; }
+}
+
 public sealed class Session
 {
     public string Id { get; set; } = "";
@@ -142,6 +161,8 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
     public DbSet<DemoSeed> DemoSeeds => Set<DemoSeed>();
     public DbSet<SavingsAccount> SavingsAccounts => Set<SavingsAccount>();
     public DbSet<SavingsEntry> SavingsEntries => Set<SavingsEntry>();
+    public DbSet<RecurringTask> RecurringTasks => Set<RecurringTask>();
+    public DbSet<TaskCompletion> TaskCompletions => Set<TaskCompletion>();
 
     // Serialize short financial/catalogue mutations for one owner. Never hold this over AI/Telegram I/O.
     public async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> LockUser(User user, CancellationToken ct)
@@ -157,6 +178,22 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
 
     protected override void OnModelCreating(ModelBuilder model)
     {
+        model.Entity<RecurringTask>(entity =>
+        {
+            entity.HasAlternateKey(x => new { x.UserId, x.Id });
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            entity.Property(x => x.Name).HasMaxLength(120);
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.UserId, x.Deleted, x.CreatedAt, x.Id });
+            entity.ToTable(t => t.HasCheckConstraint("valid_task_interval", "\"IntervalDays\" IN (1, 2, 3, 7)"));
+        });
+        model.Entity<TaskCompletion>(entity =>
+        {
+            entity.HasKey(x => new { x.UserId, x.Date, x.TaskId });
+            entity.HasIndex(x => new { x.UserId, x.TaskId });
+            entity.HasOne<RecurringTask>().WithMany().HasForeignKey(x => new { x.UserId, x.TaskId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+        });
         model.Entity<User>().HasIndex(x => x.TelegramId).IsUnique();
         model.Entity<User>().Property(x => x.Version).IsConcurrencyToken();
         model.Entity<User>().Property(x => x.InputMode).HasDefaultValue("ai");

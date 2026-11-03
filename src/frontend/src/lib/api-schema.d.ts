@@ -2004,6 +2004,165 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/tasks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          date?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["TaskListDto"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateTaskRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["RecurringTaskDto"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/tasks/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RenameTaskRequest"];
+        };
+      };
+      responses: {
+        /** @description No Content */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    post?: never;
+    delete: {
+      parameters: {
+        query: {
+          version: number;
+        };
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description No Content */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/tasks/{id}/completion": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["TaskCompletionRequest"];
+        };
+      };
+      responses: {
+        /** @description No Content */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2275,6 +2434,48 @@ export interface components {
       /** Format: int32 */
       page: number;
       hasMore: boolean;
+    };
+    CreateTaskRequest: {
+      /** Format: uuid */
+      requestId: string;
+      name: string;
+      /** Format: int32 */
+      intervalDays: number;
+      /** Format: date */
+      startDate: string;
+    };
+    RenameTaskRequest: {
+      name: string;
+      /** Format: int32 */
+      version: number;
+    };
+    TaskCompletionRequest: {
+      /** Format: date */
+      date: string;
+      completed: boolean;
+      /** Format: int32 */
+      version: number;
+    };
+    RecurringTaskDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: int32 */
+      intervalDays: number;
+      /** Format: date */
+      startDate: string;
+      /** Format: int32 */
+      version: number;
+      isDue: boolean;
+      completed: boolean;
+      canComplete: boolean;
+    };
+    TaskListDto: {
+      /** Format: date */
+      today: string;
+      /** Format: date */
+      date: string;
+      items: components["schemas"]["RecurringTaskDto"][];
     };
   };
   responses: never;

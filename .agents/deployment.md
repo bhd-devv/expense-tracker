@@ -17,8 +17,8 @@ Compose Location — `/deploy/compose.yaml`. Перевір реальний bui
 | --- | --- | --- |
 | `frontend` | Next.js production server, standalone output | Публічний HTTPS через proxy |
 | `backend` | ASP.NET Core API, бізнес-сценарії, persistence та приватний bot API | Лише `/api/*` через proxy; `/internal/bot/*` приватно |
-| `bot` | Python / aiogram, webhook, inbox/outbox delivery workers | Лише webhook через proxy; backend доступний у Docker network |
-| `postgres` | Дані, сесії, inbox/outbox | Лише приватна Docker network |
+| `bot` | Python / aiogram, webhook і один inbox worker для двох launch-кнопок | Лише webhook через proxy; backend доступний у Docker network |
+| `postgres` | Дані, сесії, inbox | Лише приватна Docker network |
 | `migrate` | Одноразові EF Core migrations | Deployment job, без публічного порту |
 
 Один публічний origin, наприклад `https://expenses.example.com`:
@@ -78,7 +78,8 @@ Python — із вибраною aiogram 3.x. Lockfiles обов'язкові: f
 5. Окремою явною deployment-дією зареєструй Telegram webhook і Mini App URL.
    Не викликай `setWebhook` на старті кожної replica. Реєстрація не повинна
    неявно очищати pending updates.
-6. Перевір вхід із Telegram, сценарій витрати та його відображення в обох каналах.
+   Реєстрація також прибирає старі command menus і додатковий menu Web App.
+6. Перевір обидві inline launch-кнопки, Telegram-вхід і сценарії Web Apps.
 
 Не виконуй `Database.Migrate()` конкурентно при старті всіх replicas.
 Не покладайся лише на Compose `depends_on` як на перевірку готовності БД.
@@ -91,16 +92,16 @@ Python — із вибраною aiogram 3.x. Lockfiles обов'язкові: f
   `/api/health/ready` із перевіркою необхідних залежностей. Відповіді не
   розкривають connection strings, версії схеми або інші внутрішні дані.
 - Docker healthchecks для сервісів, restart policy та graceful shutdown.
-  Передавай CancellationToken; зупинка worker не має втрачати inbox/outbox.
+  Передавай CancellationToken; зупинка worker не має втрачати inbox.
 - Контейнери запускаються без root, де це підтримано runtime. Фінансові
   дані не зберігаються у файловій системі ephemeral containers.
 - Persistent volumes для PostgreSQL і Data Protection keys; автоматичні
   резервні копії зберігаються поза хостом. Перевіряй відновлення.
 - Початково одна backend та одна bot replica. Масштабування вимагає спільних keys,
-  коректного locking/claiming inbox/outbox і конкурентного контролю діалогів.
+  коректного locking/claiming inbox. Actor API й діалогів немає.
 - Міграції мають зберігати сумісність під час оновлення. Rollback image
   не відкочує БД; плануй expand/contract для несумісних змін.
-- Спостерігай за readiness, помилками auth, затримкою та backlog inbox/outbox,
+- Спостерігай за readiness, помилками auth, затримкою та backlog inbox,
   failed jobs і помилками Telegram. Використовуй correlation IDs без секретів.
 - Кожен сервіс дублює stdout/stderr у persistent log volume через спільний
   runner; UTC daily gzip rotation, retention через `LOG_RETENTION_DAYS`.

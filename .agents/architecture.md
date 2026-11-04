@@ -7,7 +7,7 @@ Telegram Mini App (Next.js) ── HTTPS /api/* ──> ASP.NET Core ──> Pos
                                                   ^
 Telegram Bot API ── HTTPS webhook ──> Python / aiogram
                                      приватний API
-Telegram Bot API <── aiogram <── outbox через приватний API
+Telegram Bot API <── aiogram (лише дві кнопки; durable inbox через API)
 ```
 
 Backend: підтримувана LTS .NET / ASP.NET Core, nullable reference types,
@@ -20,14 +20,11 @@ Frontend: Next.js App Router, React, strict TypeScript. Server Components
 Mini App передає автентифікаційні дані backend і працює з API через той самий
 origin. Не перенось бізнес-операції або доступ до БД у Next.js Server Actions.
 
-Telegram-бот — окремий Python-сервіс на підтримуваній aiogram 3.x.
-Використовуй штатні Dispatcher, Router, filters, middleware, CallbackData
-та keyboard builders за потребою. Для webhook використовуй інтеграцію
-aiogram з aiohttp; не додавай другий web framework лише для цього endpoint.
-Бот приймає updates, керує кнопковим UX і викликає приватний .NET API
-через один async HTTP client із таймаутами та connection pooling.
-Голосовий файл завантажуй штатним aiogram client із перевіркою лімітів і
-передавай backend як аудіодані; не передавай token-bearing Telegram URL.
+Telegram-бот — окремий Python-сервіс на aiogram 3.x із двома inline
+`web_app` кнопками. Router лише показує меню на приватне повідомлення.
+Один async HTTP client звертається до приватного .NET API для durable inbox;
+бот не читає профіль, не встановлює actor і не викликає бізнес-сценарії.
+Обробка тексту/голосу, фінансів і завдань доступна лише у Web Apps.
 
 Усі бізнес-правила, транскрипція/категоризація через OpenRouter, фінансові
 транзакції та доступ до PostgreSQL належать .NET backend. Python не має
@@ -72,8 +69,8 @@ src/
     uv.lock
     src/
       expense_tracker_bot/
-        handlers/
-        keyboards/
+        handlers.py
+        copy.py
         api.py
         main.py
     tests/
@@ -93,12 +90,11 @@ MediatR, Redis або message broker без підтвердженої потр�
 
 ## Межі й контракти
 
-- Endpoints і aiogram handlers тонкі: вхідні дані, auth context, виклик
-  backend-сценарію, перетворення результату у HTTP або Telegram-повідомлення.
-- Один прикладний сценарій створення/редагування витрати обслуговує обидва
-  канали. Перевірки суми, власника, валюти й категорії живуть тут і в БД.
+- Browser endpoints тонкі: вхідні дані, auth context, виклик backend use case.
+  Перевірки суми, власника, валюти й категорії живуть на backend і в БД.
+- Aiogram handler лише будує дві кнопки; бізнес-контракти до бота не входять.
 - Власника визначає перевірений серверний контекст; `userId` із клієнтського
-  JSON, callback або URL не є джерелом повноважень.
+  JSON або URL не є джерелом повноважень.
 - Публічний контракт API — OpenAPI з backend. Генеруй TypeScript DTO/client
   із нього, перевіряй актуальність генерації. Валідуй зовнішній JSON на межі;
   згенеровані типи самі по собі не перевіряють runtime-дані.
@@ -112,26 +108,23 @@ MediatR, Redis або message broker без підтвердженої потр�
 
 ## Узгодженість і повторна доставка
 
-PostgreSQL — єдине джерело стану: записи, сесії, bot conversations,
-отримані updates, використані auth proofs та outbox. Міграції EF Core
-версіонуються разом із кодом; власник схеми й усіх записів — .NET backend.
-Бот приймає/claim-ить inbox і outbox через приватний API; механіка
-доставки описана в [telegram.md](telegram.md). Унікальний constraint на Telegram user ID
-захищає від створення двох користувачів під час одночасного першого входу.
+PostgreSQL — єдине джерело стану вебзастосунків, сесій, auth proofs і
+отриманих inbox updates. Міграції EF Core версіонуються разом із кодом;
+власник схеми й усіх записів — .NET backend. Бот приймає/claim-ить лише inbox.
+Service credential не створює User і не дає `user_id`; actor routes видалені.
+Фінансові сценарії більше не створюють Telegram outbox повідомлень.
+`Conversation`, `DemoSeed` та історичні outbox записи залишено для сумісності
+без endpoints, workers чи destructive migration. Деталі — [ADR-020](knowledge/decisions.md).
 
-Зміна фінансових даних і запис вихідної події/повідомлення виконуються в
-короткій транзакції. Публікуй ефекти після commit. Aiogram worker доставляє
-підготовлені backend події через Telegram Bot API. Він має явні
-таймаути, обмежені retries, backoff і видимий стан невдалих повідомлень.
-Доставка Telegram може дати дубль після невідомої мережевої відповіді;
-не обіцяй exactly-once delivery і не повторюй фінансову операцію через це.
+Унікальний constraint на Telegram user ID захищає одночасний перший вхід
+із двох browser sessions. Не тримай транзакції під час AI/Telegram I/O.
+Inbox lease захищає доставку меню; невідома відповідь Telegram може дати
+дубль повідомлення без повтору бізнес-операції.
 
 Для створення витрати Mini App генерує idempotency key на одну підтверджену
 операцію та зберігає його до встановлення результату. Backend зберігає key,
 власника, тип операції, hash нормалізованих вхідних даних і результат атомарно
 зі зміною. Повтор із тим самим key та іншими даними повертає конфлікт.
-У боті одноразовий ID підтвердження чернетки виконує ту саму роль; новий
-`update_id` повторного натискання не повинен створювати ще одну витрату.
 
 Idempotency key не є дозволом на прихований retry. Після невідомої відповіді
 спочатку встанови результат або запропонуй явну повторну дію з тим самим key.
@@ -139,9 +132,9 @@ Idempotency key не є дозволом на прихований retry. Піс
 
 ## Окремий журнал накопичень
 
-Feature `Savings` на .NET обслуговує `/api/savings` і приватні
-`/internal/bot/actor/savings` через ті самі use cases. GET списку, POST
-створення та GET/POST `/{id}/entries`; усі запити actor-scoped.
+Feature `Savings` на .NET обслуговує `/api/savings`: GET списку, POST
+створення та GET/POST `/{id}/entries`. Усі запити browser-session scoped.
+Приватних bot workspace endpoints немає.
 `SavingsAccounts` зберігає власника, назву, legacy валюту, decimal-підсумки
 Added/Spent (`numeric(28,4)`). `SavingsEntries` — незмінні операції із
 `numeric(20,4)` сумою та composite FK `(UserId, AccountId)` до рахунка.
@@ -171,5 +164,5 @@ Owner advisory lock серіалізує читання визначень/ві�
 
 Дати й доступність відмітки обчислює backend за `TimeProvider` і timezone
 профілю. Frontend валідує відповіді Zod та показує серверні flags.
-Контракт і клієнтські DTO — у спільній OpenAPI-схемі; згенеровані Python
-моделі не означають наявності bot use case. Межі — [ADR-019](knowledge/decisions.md).
+Контракт і клієнтські DTO — у спільній OpenAPI-схемі. Python-моделі
+генеруються лише з inbox endpoints; фінансові й task DTO до них не входять. Межі — [ADR-019](knowledge/decisions.md).

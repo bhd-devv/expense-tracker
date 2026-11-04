@@ -388,3 +388,34 @@
 - **Контракти:** [product](../product.md), [architecture](../architecture.md),
   [Telegram](../telegram.md), [deployment](../../docs/deployment.md).
 - **Задача:** [вебзастосунок завдань](../tasks/recurring-tasks-2026-11-03/README.md).
+
+## ADR-020: Telegram-бот лише відкриває два Web Apps
+
+- **Статус:** accepted, 2026-11-04; реалізовано локально, runtime не перевірено.
+- **Контекст:** користувач прямо скасував команди й усю пов'язану логіку;
+  бот має лише дві кнопки відкриття витрат і завдань. Це замінює попередню
+  вимогу channel parity та launch UX із ADR-019.
+- **Рішення:** два inline `web_app` посилання `/` і `/tasks` для signed
+  initData. Будь-яке private human message лише показує меню й прибирає
+  стару reply keyboard. Мова меню з Telegram, без читання профілю.
+  Command/callback/dialog/seed/audio/finance handlers, outbox worker,
+  notification creation та private actor workspace routes видалені.
+  Service auth дає лише `service=bot`; довільний actor header ігнорується.
+  Залишено мінімальний durable inbox із dedupe/lease для доставки меню.
+  Python DTO генеруються лише з private delivery OpenAPI.
+- **Альтернативи:** приховати кнопки, залишивши actor API й фінансові
+  handlers, не виконало б запит про видалення логіки. Повне видалення inbox
+  змінило б надійність webhook і не потрібне для цього сценарію.
+- **Persistence:** Conversation/DemoSeed та історичні outbox записи лишаються
+  сумісним неактивним сховищем. Destructive migration немає. Старі витрати,
+  демодані, накопичення й завдання не видаляються. Legacy bot draft можна
+  підтвердити у Web App без Telegram-сповіщення.
+- **Release:** зупинити старий bot worker, узгоджено оновити backend/бота,
+  явно виконати register-webhook: message-only, pending зберігаються,
+  default/all-private command menus для default/uk/en очищуються,
+  додатковий menu Web App скидається. Старі callbacks не виконують дій.
+  Rollback потребує сумісної пари images; повернення старого outbox worker
+  може доставити старі queued notifications, тому потребує перегляду черги.
+- **Контракти:** [Telegram](../telegram.md), [security](../security.md),
+  [architecture](../architecture.md), [deployment](../../docs/deployment.md).
+- **Задача:** [бот із двома кнопками](../tasks/launcher-only-2026-11-04/README.md).

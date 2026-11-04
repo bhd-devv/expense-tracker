@@ -3,6 +3,7 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 030 — [Бот лише відкриває витрати та завдання](../.agents/changelog/030-launcher-only-bot.md)
 - 029 — [Окремий вебзастосунок регулярних завдань](../.agents/changelog/029-recurring-tasks-web-app.md)
 - 028 — [Компактні екрани та валюта з налаштувань](../.agents/changelog/028-compact-layout-profile-currency.md)
 - 027 — [Накопичувальні рахунки з поповненнями й списаннями](../.agents/changelog/027-savings-accounts.md)

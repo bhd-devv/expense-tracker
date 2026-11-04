@@ -1,82 +1,38 @@
 # Поточний стан
 
-Оновлюй цей файл лише для активної роботи, конкретного блокера та наступної
-дії. Він не є журналом змін, health check production або списком дозволених
-задач. Старі записи не означають, що роботу потрібно продовжувати.
+Оновлюй лише активну роботу, конкретні блокери й межі перевірки.
+Історія завершених задач — у [changelog](changelog/README.md).
 
 ## Активна робота
 
-[Окремий вебзастосунок завдань](tasks/recurring-tasks-2026-11-03/README.md)
-реалізовано локально: `/tasks`, щоденні/2/3/7-денні розклади, відмітки
-за датами, окрема launch-кнопка в боті без task-сценаріїв у чаті.
-Підготовлено additive `AddRecurringTasks`, OpenAPI/DTO та тести.
-Міграція не застосовувалась; build/tests/typecheck/lint/browser/Telegram/
-PostgreSQL/Coolify не запускалися за чинними правилами. Перед release
-потрібні явна перевірка контракту з Development API й runtime перевірки.
-
-[Компактні екрани й валюта профілю](tasks/compact-layout-currency-2026-11-02/README.md)
-реалізовані локально: спільні компактні відступи, редактор із видимими діями,
-єдине позначення витрат, лімітів і накопичень без конвертації. Документація
-та diff перевірені; runtime/браузер/Telegram/PostgreSQL/Coolify не запускалися.
-
-[Накопичувальні рахунки](tasks/savings-accounts-2026-11-02/README.md) додані
-локально в Mini App, backend і бот: створення, залишок, поповнення/списання
-та журнал. Additive migration `AddSavingsAccounts` не застосована. Тести
-додані, build/typecheck/browser/PostgreSQL/Telegram/Coolify не запускалися.
-
-Локальне [візуальне оновлення Mini App](tasks/interface-polish-2026-11-02/README.md)
-завершено: спільні visual/motion tokens, оновлені поверхні й контролі,
-плавна поява вкладок/діалогів/списків і progress, reduced motion.
-Browser/Telegram, build/typecheck та візуальне QA ще не запускалися.
-
-Локальні [місячні ліміти категорій](tasks/category-limits-2026-11-02/README.md)
-реалізовані в backend, Mini App і боті: сума/валюта, прогрес, відсоток і
-прибирання ліміту. Міграція `AddCategoryLimits` підготовлена, не застосована;
-build/tests/typecheck/browser/PostgreSQL/Telegram/Coolify не запускалися.
-
-[Редагування назви категорії у її рядку](changelog/024-inline-category-rename.md)
-реалізовано локально: поле, збереження/скасування й Enter/Escape поруч із
-категорією. Build/typecheck і браузерна поведінка не перевірялися.
-
-Локальні зміни [видалення в рядках списків](tasks/inline-delete-2026-11-02/README.md)
-завершені: категорії та витрати мають сусідні дії редагування/видалення;
-архівацію прибрано з UI. DELETE категорій захищає пов'язані витрати й
-активні чернетки. Нової міграції немає; runtime перевірки не запускалися.
-
-Локальні зміни [каталогу іконок категорій](tasks/category-icons-2026-11-02/README.md)
-завершені: 100 іконок у Mini App і боті, additive migration `AddCategoryIcons`.
-Міграція не застосована; build, тести, typecheck, browser і реальний Telegram
-очікують окремого запиту користувача.
-
-Локальні зміни [ручного/AI-введення](tasks/manual-ai-input-2026-11-02/README.md)
-завершені. Підготовлено additive migration `AddInputMode`; build, тести,
-browser та реальні Telegram/OpenRouter перевірки очікують окремого запиту.
-
-Локальні зміни [витрат без фінансових рахунків](tasks/expenses-without-accounts-2026-11-02/README.md)
-завершені. Runtime перевірки очікують окремого запиту користувача;
-перед release потрібні PostgreSQL migration test і узгоджене оновлення сервісів.
+[Бот лише з двома кнопками](tasks/launcher-only-2026-11-04/README.md)
+реалізований локально: inline launch витрат `/` і завдань `/tasks`, без
+продуктових команд, callbacks, діалогів, фінансових дій і сповіщень.
+Private actor API та демонаповнення видалені; service key дає лише inbox.
+Це замінює попередню вимогу parity функцій бота й Mini App.
 
 ## Блокери
 
-Немає для завершеної локальної задачі.
+Немає для локальної реалізації. Реліз і live registration не виконувались.
 
 ## Межі впевненості
 
-Міграція `RemoveFinancialAccounts` підготовлена, але не застосовувалася до
-реальної БД у цій задачі. Backend build, tests, lint/typecheck, browser і
-Coolify для спрощеної моделі не запускалися. Зворотна міграція відхиляється;
-перед production release потрібен backup. Докладно — [deployment](../docs/deployment.md).
+Runtime build/tests/lint/typecheck/browser/PostgreSQL/Telegram/Coolify не
+запускалися за чинними правилами. Перед release потрібні окремо запитані
+перевірки та OpenAPI export/drift із Development API. Додані regression
+тести, оновлені consumers і перевірені документація/diff не замінюють runtime.
 
-Наданий Docker inspect підтвердив дві спільні мережі gateway/backend;
-production logs показали HTTP у `Antiforgery.CheckSSLConfig`.
-[Приватний API alias виправлено локально](changelog/018-gateway-private-api-routing.md).
-Наступна зовнішня дія — redeploy оновленого Compose й gateway image,
-потім перевірка private DNS, 200 `/api/auth/csrf` та входу з Telegram.
-Після правки цей сценарій у Coolify ще не перевірено.
+Нової міграції для спрощення бота немає. Попередні AddInputMode,
+AddCategoryIcons, AddCategoryLimits, AddSavingsAccounts та AddRecurringTasks
+підготовлені; тут не застосовувались. RemoveFinancialAccounts потребує
+backup і узгодженого переходу; Down відхилено. Деталі —
+[deployment](../docs/deployment.md).
 
-Живі OpenRouter/Telegram, HTTPS у Telegram-клієнтах і Coolify ще не перевірені.
-Логування та щоденні архіви [реалізовано локально](../docs/logging.md);
-image build, Caddy runtime і права log volumes не перевірені, оскільки
-локальний Docker daemon недоступний. Перед release потрібний container smoke.
-Для наступної інтеграційної задачі потрібні тестові credentials, model IDs і
-домен. Документ не дає дозволу на деплой або реєстрацію webhook.
+Backend і бот слід оновити узгоджено без старого worker, потім явно
+виконати register-webhook для очищення старого command menu. Наступне
+приватне повідомлення прибере reply keyboard. Старі діалоги не продовжуються.
+
+Виправлення private gateway alias і HTTPS forwarding у Coolify,
+production cookie/CSRF, реальні Telegram-клієнти, live OpenRouter та права
+persistent log volumes залишаються неперевіреними у deployment.
+Цей документ не дає дозволу на міграцію, реєстрацію webhook чи деплой.

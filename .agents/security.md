@@ -1,17 +1,18 @@
 # Авторизація та безпека
 
-## Єдина особа в Telegram і Mini App
+## Особа у вебзастосунках
 
 Внутрішній User пов'язаний з унікальним числовим Telegram user ID.
 Username, телефон, ім'я, `chat_id`, query-параметр `userId` або об'єкт
 `initDataUnsafe` не доводять особу. Зміна username не створює нового акаунта.
-В обох каналах backend знаходить того самого User за перевіреним Telegram ID.
+В обох Web Apps backend знаходить того самого User за перевіреним Telegram ID.
+Повідомлення в боті не створює User і не дає доступу до його даних.
 Пароль і ручне зв'язування акаунтів для запуску з Telegram не потрібні.
 
 ## Вхід Mini App
 
 1. Користувач відкриває HTTPS Mini App через inline `web_app` кнопку Telegram
-   або menu button бота. Запуск через reply `KeyboardButton.web_app` не
+   бота. Запуск через reply `KeyboardButton.web_app` не
    передає `initData` і не використовується для входу.
    Client boundary отримує сирий `Telegram.WebApp.initData` із Telegram SDK.
 2. Передай його один раз у тілі `POST /api/auth/telegram` через TLS.
@@ -58,44 +59,29 @@ Antiforgery. Одного власного `user_id` недостатньо дл
 загубилась разом із cookie, запропонуй повторно відкрити Mini App із Telegram.
 Дедуплікуй паралельні запити входу, зокрема подвійні effects у React dev mode.
 
-## Вхід через бота
+## Webhook бота й межа aiogram → .NET
 
-- Aiogram-сервіс приймає updates через HTTPS webhook із перевіркою
-  `X-Telegram-Bot-Api-Secret-Token` проти окремого випадкового секрету.
-  Не використовуй bot token у URL webhook.
-- Після перевірки webhook підтримуй фінансові дії лише в особистих чатах,
-  із валідним `from.id` та відповідним типом update. Для callback identity —
-  `callback_query.from.id`, а не ID автора повідомлення бота.
-- Якщо update вказує на групу або не містить надійного контексту особи,
-  не показуй фінансові дані; запропонуй особистий чат.
-- Зв'язування з User відбувається на сервері. Webhook secret автентифікує
-  доставку Telegram, а серверна ownership-перевірка — конкретну операцію.
-
-## Межа довіри aiogram → .NET
-
-- Бот є довіреним серверним адаптером із правом передати перевірений
-  Telegram actor context. Для нього використовуй окремий service credential,
-  відмінний від bot token, webhook secret і browser session cookie.
-- Початковий механізм — випадковий API key у заголовку Authorization для
-  окремої ASP.NET Core authentication scheme/policy. Використовуй стандартний
-  генератор випадкових байтів і constant-time comparison; не пиши власні
-  HMAC/JWT-схеми. Ключ зберігається у secrets обох сервісів і має ротацію.
-- Приватні `/internal/bot/*` endpoints доступні лише в Docker network;
-  proxy не публікує їх і backend port не відкритий напряму назовні.
-  Service credential обов'язковий навіть у приватній мережі. Якщо сервіси
-  розміщено на різних хостах, передавай запити через захищений TLS-канал.
-- `from.id` потрапляє до цих endpoints лише після перевірки Telegram update
-  aiogram-сервісом. Service key доводить походження від бота, а не право на
-  довільну фінансову дію: backend встановлює User за actor context і перевіряє
-  ownership записів, категорій, діалогів і callbacks.
-- Browser endpoints не приймають service headers або довільний Telegram ID
-  як спосіб входу. Bot endpoints не створюють browser sessions і не видають
-  боту права адміністратора або доступ до користувацьких даних без actor scope.
-- Aiogram не доводить особу Mini App. Перевірка підпису `initData`, replay
-  protection і browser session лишаються в .NET. Bot token потрібний aiogram
-  для Telegram API та backend для перевірки Mini App; webhook secret потрібний
-  лише aiogram. DB credentials і Data Protection keys потрібні лише backend;
-  OpenRouter key також залишається лише в .NET.
+- Aiogram перевіряє `X-Telegram-Bot-Api-Secret-Token` проти окремого
+  випадкового секрету. Bot token не використовується в URL webhook.
+- Приватне повідомлення людини використовується лише для відповіді двома
+  кнопками. Групи й callbacks ігноруються. До inbox не потрапляють тексти,
+  аудіо, імена чи callback data; ID потрібні лише для доставки меню.
+- Бот має окремий випадковий service API key у Authorization, відмінний
+  від bot token, webhook secret і browser cookie. Authentication scheme
+  перевіряє його constant-time і видає лише `service=bot`, без `user_id`.
+  `X-Telegram-User-Id` не створює actor і не використовується для входу.
+- Приватні `/internal/bot/*` endpoints — лише inbox accept, inbox claim і
+  lease result. Actor/workspace/conversation/seed routes видалені; outbox
+  claim повертає 404. Lease result також обмежений inbox delivery.
+- Приватний API доступний лише в Docker network і завжди вимагає ключ;
+  proxy блокує `/internal/*`, backend port не публікується. Між хостами
+  потрібен TLS. Ключ зберігається в secrets backend/бота й має ротацію.
+- Service key не автентифікує browser requests і не дає доступу до фінансів
+  або завдань. Aiogram не доводить особу Mini App: `initData`, replay
+  protection, cookie та CSRF перевіряє .NET.
+- Bot token потрібний aiogram для Telegram API та backend для перевірки
+  Mini App; webhook secret — лише aiogram. DB credentials, Data Protection
+  keys і OpenRouter key доступні лише backend.
 
 ## Захист API та даних
 
@@ -108,7 +94,7 @@ Antiforgery. Одного власного `user_id` недостатньо дл
 - Перевіряй origin для browser mutations. Не використовуй GET для зміни даних.
   Не дозволяй довільні credentialed CORS origins.
 - Вибирай сутності із фільтром власника й перевіряй ownership зв'язаних ID.
-  Захист має працювати однаково для HTTP, bot handlers і callback buttons.
+  Захист застосовується до всіх browser endpoints; бот їх не викликає.
 - `callback_data`, `start_param` і deep links — недовірені дані; вони не
   надають права доступу. Службові одноразові токени мають TTL і прив'язку
   до власника, конкретної дії та чернетки/версії сутності.

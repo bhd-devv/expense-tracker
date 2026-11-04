@@ -61,7 +61,6 @@ try
     builder.Services.AddScoped<SavingsService>();
     builder.Services.AddScoped<TaskService>();
     builder.Services.AddScoped<ExpenseService>();
-    builder.Services.AddScoped<DemoSeedService>();
     builder.Services.AddSingleton<TelegramBotIdentity>();
     builder.Services.AddHttpClient("TelegramIdentity", client =>
     {
@@ -133,8 +132,7 @@ try
         }).AddScheme<AuthenticationSchemeOptions, BotAuthentication>("Bot", _ => { });
     builder.Services.AddAuthorizationBuilder()
         .AddPolicy("Browser", policy => policy.AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme).RequireAuthenticatedUser().RequireClaim("user_id"))
-        .AddPolicy("Bot", policy => policy.AddAuthenticationSchemes("Bot").RequireClaim("service", "bot"))
-        .AddPolicy("BotActor", policy => policy.AddAuthenticationSchemes("Bot").RequireClaim("service", "bot").RequireClaim("user_id"));
+        .AddPolicy("Bot", policy => policy.AddAuthenticationSchemes("Bot").RequireClaim("service", "bot"));
     builder.Services.AddAntiforgery(options =>
     {
         options.HeaderName = "X-CSRF-Token";
@@ -197,7 +195,7 @@ try
         await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status = "ok" }) : Results.StatusCode(503));
     if (development) app.MapOpenApi();
     app.MapAuth();
-    app.MapGroup("/api").RequireAuthorization("Browser").RequireRateLimiting("workspace").MapWorkspace("mini_app");
+    app.MapGroup("/api").RequireAuthorization("Browser").RequireRateLimiting("workspace").MapWorkspace();
     app.MapGroup("/api").RequireAuthorization("Browser").RequireRateLimiting("workspace").MapTasks();
     app.MapBot();
     app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("API started"));

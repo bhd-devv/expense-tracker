@@ -162,8 +162,6 @@ public sealed class ExpenseService(Database db, TimeProvider clock, OpenRouter a
         draft.Status = "saved";
         ClearContent(draft);
         draft.Version++;
-        if (draft.Source == "bot")
-            db.Deliveries.Add(new Delivery { Kind = "outbox", DedupeKey = $"saved:{id}", Payload = JsonSerializer.Serialize(new { kind = "saved", telegramId = user.TelegramId, expenseId = id }) });
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         logger?.LogInformation("Expense saved expenseId={ExpenseId} userId={UserId} source={Source}", expense.Id, user.Id, draft.Source);

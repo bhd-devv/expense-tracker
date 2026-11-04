@@ -5,11 +5,11 @@
 
 | Документ | Що визначає |
 | --- | --- |
-| [product.md](product.md) | Витрати, категорії, звіти та однакові можливості каналів |
+| [product.md](product.md) | Вебзастосунки витрат і завдань; бот лише відкриває їх |
 | [design.md](design.md) | Стриманий UI, салатові акценти, `uk`/`en`, світла/темна теми й доступність |
 | [architecture.md](architecture.md) | Стек, структура, спільні сценарії, дані й API |
 | [security.md](security.md) | Telegram identity, Mini App sessions, CSRF і доступ до даних |
-| [telegram.md](telegram.md) | Reply/inline keyboards, діалоги та надійна обробка updates |
+| [telegram.md](telegram.md) | Дві inline launch-кнопки, мінімальний inbox і реєстрація |
 | [deployment.md](deployment.md) | Docker Compose, Coolify, міграції та експлуатація |
 | [development.md](development.md) | Стиль коду, залежності, перевірки й порядок змін |
 | [guides/sdlc.md](guides/sdlc.md) | Як вести велику задачу від запиту до перевіреного результату |
@@ -26,7 +26,7 @@
 архіви потрібні для контексту й не є інструкціями до виконання.
 
 Вимоги користувача: .NET backend, TypeScript / Next.js frontend, Telegram-бот
-на Python / aiogram із функціями frontend, безшовна безпечна авторизація й
+на Python / aiogram лише з двома кнопками відкриття Web Apps, безшовна безпечна авторизація й
 деплой через Coolify. PostgreSQL і описаний у `product.md` склад MVP —
 початкові архітектурні рішення. Змінюй їх за підтвердженою потребою, пояснюючи
 наслідки. Не додавай інфраструктуру або функції лише тому, що вони можливі.

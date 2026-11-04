@@ -8,7 +8,7 @@ namespace ExpenseTracker.Api.Features;
 
 public static class WorkspaceEndpoints
 {
-    public static void MapWorkspace(this RouteGroupBuilder group, string source)
+    public static void MapWorkspace(this RouteGroupBuilder group)
     {
         group.MapGet("/savings", async (HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
             await savings.List(await users.Current(context, ct), ct));
@@ -55,7 +55,7 @@ public static class WorkspaceEndpoints
             HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
             await expenses.Report(await users.Current(context, ct), from, to, categoryId, ct));
         group.MapPost("/drafts", async (CreateDraftRequest input, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
-            await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, source, null, ct, input.Mode)).RequireRateLimiting("ai");
+            await expenses.Create(await users.Current(context, ct), input.RequestId, input.Text, "mini_app", null, ct, input.Mode)).RequireRateLimiting("ai");
         group.MapPost("/drafts/audio", async (HttpRequest request, HttpContext context, UserService users, ExpenseService expenses, ILogger<OpenRouter> logger, CancellationToken ct) =>
         {
             var user = await users.Current(context, ct);
@@ -67,7 +67,7 @@ public static class WorkspaceEndpoints
             if (!Guid.TryParse(form["requestId"], out var requestId)) throw new ApiError("invalid_request_id");
             await using var stream = file.OpenReadStream();
             var audio = await OpenRouter.NormalizeAudio(stream, ct, logger);
-            return await expenses.Create(user, requestId, "", source, audio, ct);
+            return await expenses.Create(user, requestId, "", "mini_app", audio, ct);
         }).DisableAntiforgery().RequireRateLimiting("ai");
         group.MapGet("/drafts/{id:guid}", async (Guid id, HttpContext context, UserService users, ExpenseService expenses, CancellationToken ct) =>
         {

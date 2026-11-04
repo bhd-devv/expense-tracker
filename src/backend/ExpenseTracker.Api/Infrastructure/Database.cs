@@ -117,6 +117,7 @@ public sealed class AuthProof
     public DateTimeOffset ExpiresAt { get; set; }
 }
 
+// Compatibility storage only: chat workflows have been removed. Preserve existing data/schema.
 public sealed class Conversation
 {
     public Guid UserId { get; set; }
@@ -140,6 +141,7 @@ public sealed class Delivery
     public int Attempts { get; set; }
 }
 
+// Compatibility storage only: there is no active seed endpoint or service.
 public sealed class DemoSeed
 {
     public Guid UserId { get; set; }

@@ -27,15 +27,13 @@ public sealed partial class PostgresTests
 {
 
     [PostgresFact]
-    public async Task SavingsAreSharedExactIdempotentAndIsolatedFromExpensesAndOtherOwners()
+    public async Task SavingsAreExactIdempotentAcrossBrowserSessionsAndIsolatedFromExpensesAndOtherOwners()
     {
         await using var factory = await Factory();
         var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
         using var browser = await Browser(factory, telegramId);
         using var stranger = await Browser(factory, telegramId + 1);
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        using var secondSession = await Browser(factory, telegramId);
         var reportBefore = await browser.GetStringAsync("/api/reports");
         var create = new CreateSavingsRequest(Guid.NewGuid(), "Vacation", "USD");
         var created = await browser.PostAsJsonAsync("/api/savings", create);
@@ -61,8 +59,8 @@ public sealed partial class PostgresTests
             input with { RequestId = Guid.Empty }
         })
             Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PostAsJsonAsync(path, invalid)).StatusCode);
-        var internalPath = $"/internal/bot/actor/savings/{account.Id}/entries";
-        (await bot.PostAsJsonAsync(internalPath, input with { RequestId = Guid.NewGuid(), Amount = "0.20" })).EnsureSuccessStatusCode();
+        var secondSessionPath = $"/api/savings/{account.Id}/entries";
+        (await secondSession.PostAsJsonAsync(secondSessionPath, input with { RequestId = Guid.NewGuid(), Amount = "0.20" })).EnsureSuccessStatusCode();
         var current = await browser.GetFromJsonAsync<SavingsEntryPage>(path) ?? throw new InvalidOperationException();
         Assert.Equal("0.3", current.Account.Balance);
         Assert.Equal("0.3", current.Account.Added);
@@ -70,7 +68,7 @@ public sealed partial class PostgresTests
         // Two spenders see the same initial balance. Only one can withdraw 0.20.
         var spending = input with { RequestId = Guid.NewGuid(), Kind = "withdrawal", Amount = "0.20" };
         var concurrent = await Task.WhenAll(browser.PostAsJsonAsync(path, spending),
-            bot.PostAsJsonAsync(internalPath, spending with { RequestId = Guid.NewGuid() }));
+            secondSession.PostAsJsonAsync(secondSessionPath, spending with { RequestId = Guid.NewGuid() }));
         Assert.Single(concurrent.Where(x => x.StatusCode == HttpStatusCode.OK));
         Assert.Single(concurrent.Where(x => x.StatusCode == HttpStatusCode.UnprocessableEntity));
         current = await browser.GetFromJsonAsync<SavingsEntryPage>(path) ?? throw new InvalidOperationException();
@@ -80,7 +78,7 @@ public sealed partial class PostgresTests
         Assert.Equal(3, current.Items.Count);
         // Retrying the original deposit after subsequent spending must not add money.
         (await browser.PostAsJsonAsync(path, input)).EnsureSuccessStatusCode();
-        Assert.Equal("0.1", (await bot.GetFromJsonAsync<SavingsEntryPage>(internalPath))?.Account.Balance);
+        Assert.Equal("0.1", (await secondSession.GetFromJsonAsync<SavingsEntryPage>(secondSessionPath))?.Account.Balance);
         var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
         (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme,
             profile.TimeZone, "EUR", profile.AiConsent, profile.Version))).EnsureSuccessStatusCode();
@@ -179,10 +177,8 @@ public sealed partial class PostgresTests
         (await browser.PutAsJsonAsync("/api/profile", new PreferencesRequest(profile.Language, profile.Theme,
             profile.TimeZone, "USD", profile.AiConsent, profile.Version))).EnsureSuccessStatusCode();
         Assert.Equal("USD", (await Current()).Currency);
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        response = await bot.PutAsJsonAsync($"/internal/bot/actor/categories/{category.Id}/limit",
+        using var secondSession = await Browser(factory, telegramId, clock.Now);
+        response = await secondSession.PutAsJsonAsync($"/api/categories/{category.Id}/limit",
             new CategoryLimitRequest("1000", "USD", category.Version));
         response.EnsureSuccessStatusCode();
         category = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
@@ -235,10 +231,8 @@ public sealed partial class PostgresTests
         Assert.Equal(report, await browser.GetStringAsync("/api/reports"));
 
         (await browser.DeleteAsync($"/api/expenses/{expense.Id}?version={expense.Version}")).EnsureSuccessStatusCode();
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        Assert.Equal(HttpStatusCode.NoContent, (await bot.DeleteAsync($"/internal/bot/actor/categories/{category.Id}?version={category.Version}")).StatusCode);
+        using var secondSession = await Browser(factory, telegramId);
+        Assert.Equal(HttpStatusCode.NoContent, (await secondSession.DeleteAsync($"/api/categories/{category.Id}?version={category.Version}")).StatusCode);
         catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         Assert.DoesNotContain(catalog.Categories, item => item.Id == category.Id);
         Assert.Equal(HttpStatusCode.NotFound, (await browser.DeleteAsync($"{path}?version={category.Version}")).StatusCode);
@@ -271,12 +265,10 @@ public sealed partial class PostgresTests
         updated = await response.Content.ReadFromJsonAsync<CatalogItemDto>() ?? throw new InvalidOperationException();
         Assert.Equal("coffee", updated.Icon);
         Assert.Null(updated.Code);
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        var shared = await bot.GetFromJsonAsync<CatalogDto>("/internal/bot/actor/catalog") ?? throw new InvalidOperationException();
+        using var secondSession = await Browser(factory, telegramId);
+        var shared = await secondSession.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         Assert.Equal(updated, shared.Categories.First(item => item.Id == original.Id));
-        var library = await bot.GetFromJsonAsync<CategoryIconLibraryDto>("/internal/bot/actor/category-icons") ?? throw new InvalidOperationException();
+        var library = await secondSession.GetFromJsonAsync<CategoryIconLibraryDto>("/api/category-icons") ?? throw new InvalidOperationException();
         Assert.Contains(library.Groups.SelectMany(group => group.Icons), icon => icon.Id == updated.Icon);
         var created = await browser.PostAsJsonAsync("/api/categories", new CatalogRequest("Cycling", false, 0, "bike"));
         created.EnsureSuccessStatusCode();
@@ -316,7 +308,7 @@ public sealed partial class PostgresTests
     }
 
     [PostgresFact]
-    public async Task SharedChannelsOwnershipIdempotencyAndConcurrency()
+    public async Task BrowserSessionsEnforceOwnershipIdempotencyAndConcurrency()
     {
         await using var factory = await Factory();
         var userId = Random.Shared.NextInt64(1_000_000, 9_000_000_000);
@@ -336,16 +328,14 @@ public sealed partial class PostgresTests
         var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}", input with { Amount = "90", Version = expense.Version });
         edited.EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Conflict, (await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}", input with { Version = expense.Version })).StatusCode);
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", userId.ToString());
-        var shared = await bot.GetFromJsonAsync<ExpensePage>("/internal/bot/actor/expenses");
+        using var secondSession = await Browser(factory, userId);
+        var shared = await secondSession.GetFromJsonAsync<ExpensePage>("/api/expenses");
         Assert.Equal("90", Assert.Single(shared!.Items).Amount);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync("/internal/bot/actor/profile")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync("/api/profile")).StatusCode);
     }
 
     [PostgresFact]
-    public async Task ManualEntrySharesPreferenceAcrossChannelsAndSkipsAiWithoutConsent()
+    public async Task ManualEntrySharesPreferenceAcrossBrowserSessionsAndSkipsAiWithoutConsent()
     {
         var calls = 0;
         await using var factory = await Factory(services =>
@@ -360,31 +350,29 @@ public sealed partial class PostgresTests
         var preferences = new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, profile.Currency,
             false, profile.Version, "manual");
         (await browser.PutAsJsonAsync("/api/profile", preferences)).EnsureSuccessStatusCode();
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        var shared = await bot.GetFromJsonAsync<ProfileDto>("/internal/bot/actor/profile") ?? throw new InvalidOperationException();
+        using var secondSession = await Browser(factory, telegramId);
+        var shared = await secondSession.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
         Assert.Equal("manual", shared.InputMode);
         Assert.False(shared.AiConsent);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await browser.PutAsJsonAsync("/api/profile",
             preferences with { Version = shared.Version, InputMode = "invalid" })).StatusCode);
         var input = new CreateDraftRequest(Guid.NewGuid(), "");
-        var response = await bot.PostAsJsonAsync("/internal/bot/actor/drafts", input);
+        var response = await secondSession.PostAsJsonAsync("/api/drafts", input);
         response.EnsureSuccessStatusCode();
         var draft = await response.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
         Assert.Equal("ready", draft.Status);
         Assert.Null(draft.ErrorCode);
         Assert.Equal(shared.Today, draft.Date);
         Assert.Equal(shared.Currency, draft.Currency);
-        Assert.Equal(draft, await (await bot.PostAsJsonAsync("/internal/bot/actor/drafts", input)).Content.ReadFromJsonAsync<DraftDto>());
-        Assert.Equal(HttpStatusCode.Conflict, (await bot.PostAsJsonAsync("/internal/bot/actor/drafts", input with { Mode = "ai", Text = "Coffee 85" })).StatusCode);
+        Assert.Equal(draft, await (await secondSession.PostAsJsonAsync("/api/drafts", input)).Content.ReadFromJsonAsync<DraftDto>());
+        Assert.Equal(HttpStatusCode.Conflict, (await secondSession.PostAsJsonAsync("/api/drafts", input with { Mode = "ai", Text = "Coffee 85" })).StatusCode);
         var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
         var confirmation = new ExpenseInput("12.50", "EUR", catalog.Categories[0].Id, "Manual coffee", draft.Date.AddDays(-1), draft.Version);
         var saved = await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation);
         saved.EnsureSuccessStatusCode();
         Assert.Equal(confirmation.Date, (await saved.Content.ReadFromJsonAsync<ExpenseDto>())?.Date);
         (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm", confirmation)).EnsureSuccessStatusCode();
-        var sharedExpenses = await bot.GetFromJsonAsync<ExpensePage>("/internal/bot/actor/expenses") ?? throw new InvalidOperationException();
+        var sharedExpenses = await secondSession.GetFromJsonAsync<ExpensePage>("/api/expenses") ?? throw new InvalidOperationException();
         Assert.Single(sharedExpenses.Items);
         // Older clients can update preferences without resetting the newly selected mode.
         (await browser.PutAsJsonAsync("/api/profile", preferences with { Version = shared.Version, InputMode = null })).EnsureSuccessStatusCode();
@@ -438,10 +426,8 @@ public sealed partial class PostgresTests
         Assert.Equal("12.5", expense.Amount);
         (await browser.PutAsJsonAsync("/api/profile",
             new PreferencesRequest(profile.Language, profile.Theme, profile.TimeZone, "USD", false, profile.Version))).EnsureSuccessStatusCode();
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        var shared = await bot.GetFromJsonAsync<ExpenseDto>($"/internal/bot/actor/expenses/{expense.Id}")
+        using var secondSession = await Browser(factory, telegramId);
+        var shared = await secondSession.GetFromJsonAsync<ExpenseDto>($"/api/expenses/{expense.Id}")
             ?? throw new InvalidOperationException();
         Assert.Equal("USD", shared.Currency);
         Assert.Equal(expense.Amount, shared.Amount);
@@ -458,7 +444,7 @@ public sealed partial class PostgresTests
         Assert.Equal("USD", limit.Currency);
         Assert.Equal("100.5", limit.Amount);
         Assert.Equal("12.5", limit.Spent);
-        var journal = await bot.GetFromJsonAsync<SavingsEntryPage>($"/internal/bot/actor/savings/{account.Id}/entries")
+        var journal = await secondSession.GetFromJsonAsync<SavingsEntryPage>($"/api/savings/{account.Id}/entries")
             ?? throw new InvalidOperationException();
         Assert.Equal("USD", journal.Account.Currency);
         Assert.Equal("12.5", journal.Account.Balance);
@@ -512,6 +498,49 @@ public sealed partial class PostgresTests
     }
 
     [PostgresFact]
+    public async Task LauncherServiceCannotAccessWorkspaceOrCreateAnActor()
+    {
+        await using var factory = await Factory();
+        using var bot = factory.CreateClient();
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
+        var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
+        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
+        foreach (var path in new[] { "profile", "expenses", "catalog", "savings", "tasks", "conversation", "category-icons" })
+            Assert.Equal(HttpStatusCode.NotFound, (await bot.GetAsync($"/internal/bot/actor/{path}")).StatusCode);
+        foreach (var path in new[] { "seed", "drafts", "savings" })
+            Assert.Equal(HttpStatusCode.NotFound, (await bot.PostAsJsonAsync($"/internal/bot/actor/{path}", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bot.PostAsync("/internal/bot/queues/outbox/claim", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await bot.GetAsync("/api/profile")).StatusCode);
+        using var anonymous = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync("/internal/bot/queues/inbox/claim", null)).StatusCode);
+        bot.DefaultRequestHeaders.Authorization = new("Bearer", "invalid-service-key");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await bot.PostAsync("/internal/bot/queues/inbox/claim", null)).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Database>();
+        Assert.False(await db.Users.AnyAsync(x => x.TelegramId == telegramId));
+    }
+
+    [PostgresFact]
+    public async Task ConfirmingLegacyBotDraftInWebAppDoesNotQueueChatNotifications()
+    {
+        await using var factory = await Factory();
+        using var browser = await Browser(factory, Random.Shared.NextInt64(10_000_000_000, 90_000_000_000));
+        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
+        var created = await browser.PostAsJsonAsync("/api/drafts", new CreateDraftRequest(Guid.NewGuid(), "", "manual"));
+        created.EnsureSuccessStatusCode();
+        var draft = await created.Content.ReadFromJsonAsync<DraftDto>() ?? throw new InvalidOperationException();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Database>();
+            await db.Drafts.Where(x => x.Id == draft.Id).ExecuteUpdateAsync(set => set.SetProperty(x => x.Source, "bot"));
+        }
+        (await browser.PostAsJsonAsync($"/api/drafts/{draft.Id}/confirm",
+            new ExpenseInput("10", "UAH", catalog.Categories[0].Id, "Legacy draft", draft.Date, draft.Version))).EnsureSuccessStatusCode();
+        await using var check = factory.Services.CreateAsyncScope();
+        Assert.False(await check.ServiceProvider.GetRequiredService<Database>().Deliveries.AnyAsync(x => x.DedupeKey == $"saved:{draft.Id}"));
+    }
+
+    [PostgresFact]
     public async Task DurableInboxDeduplicatesAndFencesLeaseAcknowledgement()
     {
         await using var factory = await Factory();
@@ -528,110 +557,6 @@ public sealed partial class PostgresTests
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<Database>();
         Assert.Equal(1, await db.Deliveries.CountAsync(x => x.Kind == "inbox" && x.DedupeKey == updateId.ToString()));
-    }
-
-    [PostgresFact]
-    public async Task OctoberSeedIsAtomicOncePerActorAndVisibleAcrossChannels()
-    {
-        await using var factory = await Factory();
-        var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
-        using var browser = await Browser(factory, telegramId);
-        using var stranger = await Browser(factory, telegramId + 1);
-        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
-        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        Assert.Equal(HttpStatusCode.Forbidden, (await bot.PostAsync("/internal/bot/actor/seed", null)).StatusCode);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        var replies = await Task.WhenAll(bot.PostAsync("/internal/bot/actor/seed", null), bot.PostAsync("/internal/bot/actor/seed", null));
-        var results = new List<SeedResultDto>();
-        foreach (var reply in replies)
-        {
-            reply.EnsureSuccessStatusCode();
-            results.Add(await reply.Content.ReadFromJsonAsync<SeedResultDto>() ?? throw new InvalidOperationException());
-        }
-        Assert.Equal(new[] { 0, 70 }, results.Select(x => x.CreatedCount).Order().ToArray());
-        Assert.All(results, result =>
-        {
-            Assert.Equal(70, result.TotalCount);
-            Assert.Equal(new DateOnly(2026, 10, 1), result.From);
-            Assert.Equal(new DateOnly(2026, 10, 31), result.To);
-        });
-        Assert.Equal(profile, await browser.GetFromJsonAsync<ProfileDto>("/api/profile"));
-        var after = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        Assert.Equal(catalog.Categories, after.Categories);
-        var seeded = new List<ExpenseDto>();
-        for (var page = 0; page < 4; page++)
-        {
-            var expenses = await browser.GetFromJsonAsync<ExpensePage>($"/api/expenses?from=2026-10-01&to=2026-10-31&page={page}") ?? throw new InvalidOperationException();
-            Assert.Equal(page < 3, expenses.HasMore);
-            seeded.AddRange(expenses.Items);
-        }
-        Assert.Equal(70, seeded.Count);
-        Assert.Equal(31, seeded.Select(x => x.Date).Distinct().Count());
-        Assert.Equal(7, seeded.Select(x => x.CategoryId).Distinct().Count());
-        Assert.All(seeded, expense =>
-        {
-            Assert.Equal("bot", expense.Source);
-            Assert.StartsWith("Демо · ", expense.Description);
-            Assert.InRange(expense.Date, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31));
-        });
-        var report = await browser.GetFromJsonAsync<ReportDto>("/api/reports?from=2026-10-01&to=2026-10-31") ?? throw new InvalidOperationException();
-        Assert.Equal("UAH", Assert.Single(report.Totals).Currency);
-        Assert.Equal(70, Assert.Single(report.Totals).Count);
-        var expense = seeded[0];
-        Assert.Equal(HttpStatusCode.NotFound, (await stranger.GetAsync($"/api/expenses/{expense.Id}")).StatusCode);
-        var edited = await browser.PutAsJsonAsync($"/api/expenses/{expense.Id}",
-            new ExpenseInput("1.25", expense.Currency, expense.CategoryId, "Edited demo", expense.Date, expense.Version));
-        edited.EnsureSuccessStatusCode();
-        var shared = await bot.GetFromJsonAsync<ExpenseDto>($"/internal/bot/actor/expenses/{expense.Id}");
-        Assert.Equal("1.25", shared!.Amount);
-        var removed = seeded[1];
-        (await browser.DeleteAsync($"/api/expenses/{removed.Id}?version={removed.Version}")).EnsureSuccessStatusCode();
-        var retry = await (await bot.PostAsync("/internal/bot/actor/seed", null)).Content.ReadFromJsonAsync<SeedResultDto>();
-        Assert.Equal(0, retry!.CreatedCount);
-        Assert.Equal(HttpStatusCode.NotFound, (await browser.GetAsync($"/api/expenses/{removed.Id}")).StatusCode);
-        Assert.Equal("1.25", (await browser.GetFromJsonAsync<ExpenseDto>($"/api/expenses/{expense.Id}"))!.Amount);
-        Assert.Empty((await stranger.GetFromJsonAsync<ExpensePage>("/api/expenses"))!.Items);
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<Database>();
-        Assert.Equal(69, await db.Expenses.CountAsync(x => x.UserId == profile.Id));
-        Assert.Equal(1, await db.DemoSeeds.CountAsync(x => x.UserId == profile.Id));
-    }
-
-    [PostgresFact]
-    public async Task SeedRespectsCatalogLimitAndArchivedCategories()
-    {
-        await using var factory = await Factory();
-        var telegramId = Random.Shared.NextInt64(10_000_000_000, 90_000_000_000);
-        using var browser = await Browser(factory, telegramId);
-        var profile = await browser.GetFromJsonAsync<ProfileDto>("/api/profile") ?? throw new InvalidOperationException();
-        await using (var scope = factory.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<Database>();
-            db.Categories.AddRange(Enumerable.Range(1, 43).Select(i => new Category { UserId = profile.Id, Name = $"Existing {i}" }));
-            var food = await db.Categories.SingleAsync(x => x.UserId == profile.Id && x.Code == "food");
-            food.Archived = true;
-            await db.SaveChangesAsync();
-        }
-        using var bot = factory.CreateClient();
-        bot.DefaultRequestHeaders.Authorization = new("Bearer", SecurityTests.ServiceKey);
-        bot.DefaultRequestHeaders.Add("X-Telegram-User-Id", telegramId.ToString());
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await bot.PostAsync("/internal/bot/actor/seed", null)).StatusCode);
-        await using (var scope = factory.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<Database>();
-            Assert.False(await db.DemoSeeds.AnyAsync(x => x.UserId == profile.Id));
-            Assert.False(await db.Expenses.AnyAsync(x => x.UserId == profile.Id));
-            Assert.Equal(50, await db.Categories.CountAsync(x => x.UserId == profile.Id));
-            var extra = await db.Categories.FirstAsync(x => x.UserId == profile.Id && x.Code == null);
-            db.Categories.Remove(extra);
-            await db.SaveChangesAsync();
-        }
-        (await bot.PostAsync("/internal/bot/actor/seed", null)).EnsureSuccessStatusCode();
-        var catalog = await browser.GetFromJsonAsync<CatalogDto>("/api/catalog") ?? throw new InvalidOperationException();
-        Assert.Single(catalog.Categories.Where(x => x.Code == "food" && x.Archived));
-        Assert.Single(catalog.Categories.Where(x => x.Code == "food" && !x.Archived));
     }
 
     private sealed class Clock : TimeProvider

@@ -18,7 +18,7 @@ GitHub Actions вимкнено за запитом користувача: work
 
 1. Спільний backend use case, правила доступу й транзакційну межу.
 2. Контракт API, ідемпотентність і поведінку при конфлікті/невідомій відповіді.
-3. UX Mini App і відповідний повний сценарій у Telegram.
+3. UX відповідного Web App; бот лише відкриває `/` та `/tasks`.
 4. Перевірки, міграції та вплив на контейнерний деплой.
 
 ## Чистий код і мінімум boilerplate
@@ -57,7 +57,7 @@ GitHub Actions вимкнено за запитом користувача: work
 
 - Підтримувані Python і aiogram 3.x, `pyproject.toml` та `uv.lock`.
   Фіксуй Python-версію після перевірки сумісності aiogram і залежностей.
-- Router/Dispatcher, filters, middleware, CallbackData та keyboard builders
+- Router/Dispatcher, filters, middleware та inline Web App buttons
   — штатні aiogram. Створи лише потрібні handlers і функції побудови
   кнопок; не додавай по базовому класу або service wrapper на кожну дію.
 - Один async HTTP client для приватного .NET API, явні таймаути й
@@ -67,7 +67,7 @@ GitHub Actions вимкнено за запитом користувача: work
   backend-owned контракту. Без безпідставного `Any` і словників замість
   визначених структур. Транспортний код групуй за feature/операцією.
 - Не дублюй фінансові правила, SQL, AI-інтеграцію або auth Mini App в Python.
-  Durable inbox/outbox та стан діалогів доступні через приватний API,
+  Приватний API дає лише durable inbox, без actor context і діалогів,
   за [telegram.md](telegram.md) і [security.md](security.md).
 - Використовуй Ruff для format/lint, підтримуваний strict typechecker і
   pytest/pytest-asyncio для релевантних сценаріїв. Перевіряй handlers на
@@ -121,7 +121,7 @@ GitHub Actions вимкнено за запитом користувача: work
 | Frontend | Frozen install, typecheck, lint, тести за потреби, production build |
 | UI-поведінка | Цільовий browser flow; Telegram-specific поведінка також у Telegram |
 | Схема/транзакції | Інтеграційні тести на справжньому PostgreSQL, перевірка міграції |
-| Контракт API | Генерація клієнта, перевірка відсутності drift, обидва канали |
+| Контракт API | Генерація клієнта, drift, browser DTO та окремі inbox DTO |
 | Deployment | Compose validation, container build, health/routing smoke test |
 
 Команди зафіксуй у README для локального запуску. Не
@@ -131,18 +131,19 @@ GitHub Actions вимкнено за запитом користувача: work
 До першого production release перевір реальні ризикові сценарії:
 
 - Валідний, підроблений, прострочений і повторно використаний `initData`;
-  відсутній user, некоректна дата й одночасний перший вхід із двох каналів.
-- Читання/зміна чужих ID, чужі inline callbacks, CSRF, завершення й
+  відсутній user, некоректна дата й одночасний перший вхід із двох browser sessions.
+- Читання/зміна чужих ID, CSRF, завершення й
   відкликання сесії, відсутність секретів у bundle та logs.
 - Повторна доставка update, подвійне підтвердження чернетки, конкурентне
   редагування, перезапуск між commit та надсиланням Telegram-повідомлення.
 - Неправильний/відсутній bot service key, відмова публічного доступу до
-  `/internal/bot/*`, перевірка actor scope, втрата відповіді між aiogram
-  і .NET, повторний inbox/outbox claim після завершення lease.
+  `/internal/bot/*`, відсутність actor routes/user claims, втрата відповіді
+  між aiogram і .NET, повторний inbox claim після завершення lease.
 - Точність сум, дробові знаки валют, межі звітних дат/часових поясів,
   архівні категорії та окремі підсумки різних валют.
-- Одна витрата, створена через бот, видима у Mini App, і навпаки;
-  редагування, видалення й звіти також працюють через обидва канали.
+- Повідомлення, голос і старі команди в боті лише показують дві inline
+  кнопки; старі callbacks не виконують операцій. Обидва Web Apps входять
+  через підписаний initData та бачать дані того самого профілю.
 - Реальна auth/cookie/CSRF поведінка в Telegram Android, iOS, Desktop і Web;
   production routing через Coolify та відновлення БД із backup.
 

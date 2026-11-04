@@ -3,22 +3,25 @@ import logging
 import secrets
 import sys
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from time import monotonic
 from typing import Any
 
 import httpx
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramRetryAfter
-from aiogram.types import Chat, Update
+from aiogram.types import (
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeDefault,
+    MenuButtonDefault,
+    Update,
+)
 from aiohttp import web
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .api import Api, ApiError
-from .copy import COPY
-from .handlers import router, show_record
-from .models import LeaseDto, ProfileDto
+from .api import Api
+from .handlers import router
+from .models import LeaseDto
 from .observability import (
     TelegramLogging,
     configure_logging,
@@ -50,83 +53,38 @@ class Settings(BaseSettings):
 
 def minimal_update(update: Update) -> dict[str, Any] | None:
     message = update.message
-    callback = update.callback_query
-    if (
+    if not (
         message
         and message.chat.type == "private"
         and message.from_user
         and not message.from_user.is_bot
     ):
-        return update.model_dump(
-            mode="json",
-            exclude_none=True,
-            include={
-                "update_id": True,
-                "message": {
-                    "message_id": True,
-                    "date": True,
-                    "chat": {"id", "type"},
-                    "from_user": {"id", "is_bot", "first_name", "language_code"},
-                    "text": True,
-                    "voice": {"file_id", "file_unique_id", "duration", "file_size", "mime_type"},
-                },
+        return None
+    # No command, purchase text, audio ID, callback data or display name is needed
+    # to show the launcher. Do not persist them in the durable inbox.
+    return {
+        "update_id": update.update_id,
+        "message": {
+            "message_id": message.message_id,
+            "date": int(message.date.timestamp()),
+            "chat": {"id": message.chat.id, "type": "private"},
+            "from": {
+                "id": message.from_user.id,
+                "is_bot": False,
+                "first_name": "",
+                "language_code": message.from_user.language_code,
             },
-            by_alias=True,
-        )
-    if (
-        callback
-        and callback.message
-        and callback.message.chat.type == "private"
-        and not callback.from_user.is_bot
-    ):
-        return update.model_dump(
-            mode="json",
-            exclude_none=True,
-            include={
-                "update_id": True,
-                "callback_query": {
-                    "id": True,
-                    "from_user": {"id", "is_bot", "first_name", "language_code"},
-                    "chat_instance": True,
-                    "data": True,
-                    "message": {"message_id": True, "date": True, "chat": {"id", "type"}},
-                },
-            },
-            by_alias=True,
-        )
-    return None
+        },
+    }
 
 
-async def deliver(bot: Bot, client: httpx.AsyncClient, payload: Any) -> None:
-    if payload.get("kind") != "saved":
-        return
-    user_id = int(payload["telegramId"])
-    api = Api(client, user_id)
-    profile = await api.get("/profile", ProfileDto)
-    t = COPY[profile.language]
-    await bot.send_message(user_id, t["saved"])
-    # Re-read current record; a notification never performs a financial mutation.
-    from aiogram.types import Message
-
-    message = Message(
-        message_id=0, date=datetime.now(UTC), chat=Chat(id=user_id, type="private")
-    ).as_(bot)
-    try:
-        await show_record(message, api, "e", str(payload["expenseId"]), t)
-    except ApiError as error:
-        if error.status != 404:
-            raise
-
-
-async def worker(
-    kind: str, api: Api, bot: Bot, dispatcher: Dispatcher, client: httpx.AsyncClient, app_url: str
-) -> None:
+async def worker(api: Api, bot: Bot, dispatcher: Dispatcher, app_url: str) -> None:
     while True:
         lease: LeaseDto | None = None
         started = monotonic()
-        token = context.set({"queue": kind})
+        token = context.set({"queue": "inbox"})
         try:
-            response = await api.call("POST", f"/queues/{kind}/claim")
+            response = await api.call("POST", "/queues/inbox/claim")
             if response.status_code == 204:
                 await asyncio.sleep(1)
                 continue
@@ -134,19 +92,17 @@ async def worker(
             payload = lease.payload.root
             context.set(
                 {
-                    "queue": kind,
+                    "queue": "inbox",
                     "deliveryId": str(lease.id),
                     "updateId": payload.get("update_id"),
                     "attempt": lease.attempts,
                 }
             )
             logger.info("Delivery processing started")
-            if kind == "inbox":
-                await dispatcher.feed_update(
-                    bot, Update.model_validate(payload), api_client=client, app_url=app_url
-                )
-            else:
-                await deliver(bot, client, payload)
+            # Old queued callbacks are ignored; old messages get the launcher only.
+            update = Update.model_validate(payload)
+            if update.message is not None:
+                await dispatcher.feed_update(bot, update, app_url=app_url)
             await api.call(
                 "POST", f"/queues/{lease.id}/result", {"token": str(lease.token), "success": True}
             )
@@ -248,7 +204,7 @@ async def create_app(settings: Settings) -> web.Application:
                 extra={
                     "details": {
                         "updateId": update.update_id,
-                        "kind": "callback" if update.callback_query else "message",
+                        "kind": "message",
                     }
                 },
             )
@@ -277,17 +233,13 @@ async def create_app(settings: Settings) -> web.Application:
 
     async def lifecycle(_: web.Application) -> AsyncIterator[None]:
         logger.info("Bot started")
-        tasks = [
-            asyncio.create_task(worker(kind, api, bot, dispatcher, client, settings.app_url))
-            for kind in ("inbox", "outbox")
-        ]
+        task = asyncio.create_task(worker(api, bot, dispatcher, settings.app_url))
         try:
             yield
         finally:
             logger.info("Bot stopping")
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
             await client.aclose()
             await bot.session.close()
 
@@ -303,15 +255,15 @@ async def register(settings: Settings) -> None:
         await bot.set_webhook(
             settings.app_url + "/telegram/webhook",
             secret_token=settings.webhook_secret,
-            allowed_updates=["message", "callback_query"],
+            allowed_updates=["message"],
             drop_pending_updates=False,
         )
-        from aiogram.types import MenuButtonWebApp, WebAppInfo
-
-        await bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="Lime", web_app=WebAppInfo(url=settings.app_url))
-        )
-        logger.info("Webhook and menu registered")
+        # Explicit registration also removes previously published command menus.
+        for scope in (BotCommandScopeDefault(), BotCommandScopeAllPrivateChats()):
+            for language in ("", "uk", "en"):
+                await bot.delete_my_commands(scope=scope, language_code=language)
+        await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+        logger.info("Webhook registered; command menus cleared")
 
 
 def main() -> None:

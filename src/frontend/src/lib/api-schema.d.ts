@@ -247,6 +247,165 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/savings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SavingsAccountsDto"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateSavingsRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SavingsAccountDto"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/savings/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: {
+      parameters: {
+        query: {
+          version: number;
+        };
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/savings/{id}/entries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          page?: number;
+        };
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SavingsEntryPage"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["SavingsEntryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SavingsEntryDto"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/profile": {
     parameters: {
       query?: never;
@@ -333,6 +492,82 @@ export interface paths {
       };
     };
     put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/category-icons": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["CategoryIconLibraryDto"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/categories/{id}/limit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CategoryLimitRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["CatalogItemDto"];
+          };
+        };
+      };
+    };
     post?: never;
     delete?: never;
     options?: never;
@@ -821,324 +1056,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/internal/bot/inbox": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["InboxRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/internal/bot/queues/{kind}/claim": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          kind: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["LeaseDto"];
-          };
-        };
-        /** @description No Content */
-        204: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/internal/bot/queues/{id}/result": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["LeaseResult"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/category-icons": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["CategoryIconLibraryDto"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/categories/{id}/limit": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CategoryLimitRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["CatalogItemDto"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/savings": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["SavingsAccountsDto"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateSavingsRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["SavingsAccountDto"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/savings/{id}/entries": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          page?: number | null;
-        };
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["SavingsEntryPage"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["SavingsEntryRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["SavingsEntryDto"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/tasks": {
     parameters: {
       query?: never;
@@ -1298,6 +1215,371 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/income-categories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["CatalogDto"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["IncomeCategoryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["CatalogItemDto"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/income-categories/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["IncomeCategoryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["CatalogItemDto"];
+          };
+        };
+      };
+    };
+    post?: never;
+    delete: {
+      parameters: {
+        query: {
+          version: number;
+        };
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/incomes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          from?: string;
+          to?: string;
+          categoryId?: string;
+          page?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["IncomePage"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateIncomeRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["IncomeDto"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/incomes/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["IncomeInput"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["IncomeDto"];
+          };
+        };
+      };
+    };
+    post?: never;
+    delete: {
+      parameters: {
+        query: {
+          version: number;
+        };
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/internal/bot/inbox": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["InboxRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/internal/bot/queues/{kind}/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          kind: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["LeaseDto"];
+          };
+        };
+        /** @description No Content */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/internal/bot/queues/{id}/result": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["LeaseResult"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1313,25 +1595,79 @@ export interface components {
       archived: boolean;
       /** Format: int32 */
       version: number;
-      /** @default null */
-      icon: null | string;
-      /** @default null */
-      limit: components["schemas"]["CategoryLimitDto"] | null;
+      icon?: null | string;
+      limit?: null | components["schemas"]["CategoryLimitDto"];
     };
     CatalogRequest: {
       name: string;
       archived: boolean;
       /** Format: int32 */
       version: number;
-      /** @default null */
-      icon: null | string;
+      icon?: null | string;
+    };
+    CategoryIconDto: {
+      id: string;
+      uk: string;
+      en: string;
+      symbol: string;
+    };
+    CategoryIconGroupDto: {
+      id: string;
+      uk: string;
+      en: string;
+      icons: components["schemas"]["CategoryIconDto"][];
+    };
+    CategoryIconLibraryDto: {
+      groups: components["schemas"]["CategoryIconGroupDto"][];
+    };
+    CategoryLimitDto: {
+      amount: string;
+      currency: string;
+      spent: string;
+      /** Format: double */
+      usedPercent: number;
+      exceeded: boolean;
+      /** Format: date */
+      from: string;
+      /** Format: date */
+      to: string;
+    };
+    CategoryLimitRequest: {
+      amount: null | string;
+      currency: null | string;
+      /** Format: int32 */
+      version: number;
     };
     CreateDraftRequest: {
       /** Format: uuid */
       requestId: string;
       text: string;
-      /** @default null */
-      mode: null | string;
+      mode?: null | string;
+    };
+    CreateIncomeRequest: {
+      /** Format: uuid */
+      requestId: string;
+      amount: string;
+      /** Format: uuid */
+      categoryId: string;
+      description: string;
+      /** Format: date */
+      date: null | string;
+    };
+    CreateSavingsRequest: {
+      /** Format: uuid */
+      requestId: string;
+      name: string;
+      currency: string;
+    };
+    CreateTaskRequest: {
+      /** Format: uuid */
+      requestId: string;
+      name: string;
+      /** Format: int32 */
+      intervalDays: number;
+      /** Format: date */
+      startDate: string;
     };
     CsrfDto: {
       token: string;
@@ -1401,6 +1737,45 @@ export interface components {
       updateId: number;
       payload: components["schemas"]["JsonElement"];
     };
+    IncomeCategoryRequest: {
+      /** Format: uuid */
+      requestId: string;
+      name: string;
+      icon: string;
+      /** Format: int32 */
+      version: number;
+    };
+    IncomeDto: {
+      /** Format: uuid */
+      id: string;
+      amount: string;
+      currency: string;
+      /** Format: uuid */
+      categoryId: string;
+      description: string;
+      /** Format: date */
+      date: string;
+      /** Format: int32 */
+      version: number;
+    };
+    IncomeInput: {
+      amount: string;
+      /** Format: uuid */
+      categoryId: string;
+      description: string;
+      /** Format: date */
+      date: string;
+      /** Format: int32 */
+      version: number;
+    };
+    IncomePage: {
+      items: components["schemas"]["IncomeDto"][];
+      /** Format: int32 */
+      page: number;
+      hasMore: boolean;
+      total: string;
+      currency: string;
+    };
     JsonElement: unknown;
     LeaseDto: {
       /** Format: uuid */
@@ -1427,8 +1802,7 @@ export interface components {
       aiConsent: boolean;
       /** Format: int32 */
       version: number;
-      /** @default null */
-      inputMode: null | string;
+      inputMode?: null | string;
     };
     ProfileDto: {
       /** Format: uuid */
@@ -1448,6 +1822,25 @@ export interface components {
     PublicConfigDto: {
       botUsername: string;
     };
+    RecurringTaskDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: int32 */
+      intervalDays: number;
+      /** Format: date */
+      startDate: string;
+      /** Format: int32 */
+      version: number;
+      isDue: boolean;
+      completed: boolean;
+      canComplete: boolean;
+    };
+    RenameTaskRequest: {
+      name: string;
+      /** Format: int32 */
+      version: number;
+    };
     ReportDto: {
       totals: components["schemas"]["ReportTotal"][];
       categories: components["schemas"]["ReportRow"][];
@@ -1466,58 +1859,6 @@ export interface components {
       /** Format: int32 */
       count: number;
     };
-    VersionRequest: {
-      /** Format: int32 */
-      version: number;
-    };
-    CategoryIconDto: {
-      id: string;
-      uk: string;
-      en: string;
-      symbol: string;
-    };
-    CategoryIconGroupDto: {
-      id: string;
-      uk: string;
-      en: string;
-      icons: components["schemas"]["CategoryIconDto"][];
-    };
-    CategoryIconLibraryDto: {
-      groups: components["schemas"]["CategoryIconGroupDto"][];
-    };
-    CategoryLimitDto: {
-      amount: string;
-      currency: string;
-      spent: string;
-      /** Format: double */
-      usedPercent: number;
-      /** Format: date */
-      from: string;
-      /** Format: date */
-      to: string;
-      exceeded: boolean;
-    };
-    CategoryLimitRequest: {
-      amount: null | string;
-      currency: null | string;
-      /** Format: int32 */
-      version: number;
-    };
-    CreateSavingsRequest: {
-      /** Format: uuid */
-      requestId: string;
-      name: string;
-      currency: string;
-    };
-    SavingsEntryRequest: {
-      /** Format: uuid */
-      requestId: string;
-      kind: string;
-      amount: string;
-      /** Format: date */
-      date: string;
-      description: string;
-    };
     SavingsAccountDto: {
       /** Format: uuid */
       id: string;
@@ -1526,6 +1867,8 @@ export interface components {
       balance: string;
       added: string;
       spent: string;
+      /** Format: int32 */
+      version: number;
     };
     SavingsAccountsDto: {
       items: components["schemas"]["SavingsAccountDto"][];
@@ -1546,19 +1889,14 @@ export interface components {
       page: number;
       hasMore: boolean;
     };
-    CreateTaskRequest: {
+    SavingsEntryRequest: {
       /** Format: uuid */
       requestId: string;
-      name: string;
-      /** Format: int32 */
-      intervalDays: number;
+      kind: string;
+      amount: string;
       /** Format: date */
-      startDate: string;
-    };
-    RenameTaskRequest: {
-      name: string;
-      /** Format: int32 */
-      version: number;
+      date: string;
+      description: string;
     };
     TaskCompletionRequest: {
       /** Format: date */
@@ -1567,26 +1905,16 @@ export interface components {
       /** Format: int32 */
       version: number;
     };
-    RecurringTaskDto: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      /** Format: int32 */
-      intervalDays: number;
-      /** Format: date */
-      startDate: string;
-      /** Format: int32 */
-      version: number;
-      isDue: boolean;
-      completed: boolean;
-      canComplete: boolean;
-    };
     TaskListDto: {
       /** Format: date */
       today: string;
       /** Format: date */
       date: string;
       items: components["schemas"]["RecurringTaskDto"][];
+    };
+    VersionRequest: {
+      /** Format: int32 */
+      version: number;
     };
   };
   responses: never;

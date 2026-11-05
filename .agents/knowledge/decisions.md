@@ -419,3 +419,45 @@
 - **Контракти:** [Telegram](../telegram.md), [security](../security.md),
   [architecture](../architecture.md), [deployment](../../docs/deployment.md).
 - **Задача:** [бот із двома кнопками](../tasks/launcher-only-2026-11-04/README.md).
+
+## ADR-021: окремі доходи й категорії доходів
+
+- **Статус:** accepted, 2026-11-05, за прямим запитом користувача.
+- **Контекст:** потрібна сторінка доходів замість звітів у навігації й
+  незалежні категорії доходів зі сторінкою керування.
+- **Варіанти:** спільний тип Expense/Category із discriminator вимагав би
+  змін усіх існуючих AI/звітних запитів. Окремі таблиці зберігають чинні
+  expense інваріанти й явно виключають доходи зі звітів витрат.
+- **Рішення:** browser-only .NET feature, `IncomeCategories` + `Incomes`,
+  decimal суми, composite ownership FK, owner lock, version. Створення
+  атомарно зберігає request ID та hash; логічне видалення резервує ID.
+  Редагування й видалення приймають точний повтор останньої операції,
+  інакше повертають conflict. Позначення валюти з профілю, без конвертації.
+- **Сумісність:** additive `AddIncomes` перед backend/frontend; нових
+  secrets, сервісів і bot контрактів немає. Старі клієнти витрат сумісні.
+  Image rollback зберігає таблиці, Down відхилено. Міграція перевірена
+  лише в ізольованій локальній PostgreSQL 14; production/Coolify не змінені.
+- **Контракти:** [product](../product.md), [architecture](../architecture.md),
+  [deployment](../../docs/deployment.md).
+- **Задача:** [доходи](../tasks/incomes-2026-11-05/README.md).
+
+## ADR-022: видалення накопичувальних рахунків із version і tombstone
+
+- **Статус:** accepted, 2026-11-05, за прямим запитом користувача.
+- **Контекст:** кошик має бути видимим як у списках інших фінансових записів;
+  видаляти потрібно також створені рахунки з історією та залишком.
+- **Варіанти:** фізичне каскадне видалення втратило б request ID й дозволило
+  старому create retry відновити рахунок. Відмова для непорожніх рахунків
+  не виконала б запит про видалення створених рахунків.
+- **Рішення:** `SavingsAccounts.Deleted` і `Version`, DELETE із підтвердженою
+  version та owner lock. Новий entry збільшує version; stale delete повертає
+  409. Exact retry успішного delete повертає 204. Tombstone приховує всі
+  читання/записи рахунка, зберігаючи службовий журнал та зарезервований ID.
+- **Release:** additive `AddSavingsDeletion`; нових env/сервісів немає.
+  Зупинити старий backend до запуску нового: він не збільшує version і
+  ігнорує Deleted. Frontend оновлюється після нового API. Після першого
+  видалення rollback допустимий лише на deletion-aware backend; старий
+  image поверне приховані рахунки до списку. Down відхилено. Бот не змінено.
+- **Контракти:** [product](../product.md), [architecture](../architecture.md),
+  [deployment](../../docs/deployment.md).
+- **Задача:** [видалення рахунків](../tasks/delete-savings-2026-11-05/README.md).

@@ -42,6 +42,31 @@ public sealed class Expense
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public sealed class IncomeCategory
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string Name { get; set; } = "";
+    public string Icon { get; set; } = "tags";
+    public string CreateHash { get; set; } = "";
+    public bool Deleted { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public sealed class Income
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid CategoryId { get; set; }
+    public decimal Amount { get; set; }
+    public string Description { get; set; } = "";
+    public DateOnly Date { get; set; }
+    public string CreateHash { get; set; } = "";
+    public bool Deleted { get; set; }
+    public int Version { get; set; } = 1;
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class Draft
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -71,6 +96,8 @@ public sealed class SavingsAccount
     public string Currency { get; set; } = "UAH";
     public decimal Added { get; set; }
     public decimal Spent { get; set; }
+    public bool Deleted { get; set; }
+    public int Version { get; set; } = 1;
 }
 
 public sealed class SavingsEntry
@@ -155,6 +182,8 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
     public DbSet<User> Users => Set<User>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<IncomeCategory> IncomeCategories => Set<IncomeCategory>();
+    public DbSet<Income> Incomes => Set<Income>();
     public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<AuthProof> AuthProofs => Set<AuthProof>();
@@ -180,6 +209,26 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
 
     protected override void OnModelCreating(ModelBuilder model)
     {
+        model.Entity<IncomeCategory>(entity =>
+        {
+            entity.HasAlternateKey(x => new { x.UserId, x.Id });
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            entity.Property(x => x.Name).HasMaxLength(60);
+            entity.Property(x => x.Icon).HasMaxLength(60);
+            entity.Property(x => x.CreateHash).HasMaxLength(64);
+            entity.Property(x => x.Version).IsConcurrencyToken();
+        });
+        model.Entity<Income>(entity =>
+        {
+            entity.Property(x => x.Amount).HasPrecision(20, 4);
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.CreateHash).HasMaxLength(64);
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.UserId, x.Deleted, x.Date, x.Id });
+            entity.HasOne<IncomeCategory>().WithMany().HasForeignKey(x => new { x.UserId, x.CategoryId })
+                .HasPrincipalKey(x => new { x.UserId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(t => t.HasCheckConstraint("positive_income_amount", "\"Amount\" > 0"));
+        });
         model.Entity<RecurringTask>(entity =>
         {
             entity.HasAlternateKey(x => new { x.UserId, x.Id });
@@ -230,6 +279,8 @@ public sealed class Database(DbContextOptions<Database> options) : DbContext(opt
             entity.HasAlternateKey(x => new { x.UserId, x.Id });
             entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
             entity.Property(x => x.Name).HasMaxLength(60);
+            entity.Property(x => x.Deleted).HasDefaultValue(false);
+            entity.Property(x => x.Version).HasDefaultValue(1).IsConcurrencyToken();
             entity.Property(x => x.Added).HasPrecision(28, 4);
             entity.Property(x => x.Spent).HasPrecision(28, 4);
             entity.ToTable(t => t.HasCheckConstraint("valid_savings_balance", "\"Added\" >= 0 AND \"Spent\" >= 0 AND \"Spent\" <= \"Added\""));

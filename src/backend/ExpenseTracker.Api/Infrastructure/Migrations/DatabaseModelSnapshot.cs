@@ -286,6 +286,221 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Income", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(20, 4)
+                        .HasColumnType("numeric(20,4)");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreateHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CategoryId");
+
+                    b.HasIndex("UserId", "Deleted", "Date", "Id");
+
+                    b.ToTable("Incomes", t =>
+                        {
+                            t.HasCheckConstraint("positive_income_amount", "\"Amount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.IncomeCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreateHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("IncomeCategories");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.RecurringTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("IntervalDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Deleted", "CreatedAt", "Id");
+
+                    b.ToTable("RecurringTasks", t =>
+                        {
+                            t.HasCheckConstraint("valid_task_interval", "\"IntervalDays\" IN (1, 2, 3, 7)");
+                        });
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Added")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Deleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<decimal>("Spent")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SavingsAccounts", t =>
+                        {
+                            t.HasCheckConstraint("valid_savings_balance", "\"Added\" >= 0 AND \"Spent\" >= 0 AND \"Spent\" <= \"Added\"");
+                        });
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(20, 4)
+                        .HasColumnType("numeric(20,4)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "AccountId", "Date", "CreatedAt", "Id");
+
+                    b.ToTable("SavingsEntries", t =>
+                        {
+                            t.HasCheckConstraint("positive_savings_amount", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("valid_savings_kind", "\"Kind\" IN ('deposit', 'withdrawal')");
+                        });
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Session", b =>
                 {
                     b.Property<string>("Id")
@@ -303,36 +518,22 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                     b.ToTable("Sessions");
                 });
 
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsAccount", b =>
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.TaskCompletion", b =>
                 {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<Guid>("UserId").HasColumnType("uuid");
-                    b.Property<string>("Name").IsRequired().HasMaxLength(60).HasColumnType("character varying(60)");
-                    b.Property<string>("Currency").IsRequired().HasColumnType("text");
-                    b.Property<decimal>("Added").HasPrecision(28, 4).HasColumnType("numeric(28,4)");
-                    b.Property<decimal>("Spent").HasPrecision(28, 4).HasColumnType("numeric(28,4)");
-                    b.HasKey("Id");
-                    b.HasAlternateKey("UserId", "Id");
-                    b.ToTable("SavingsAccounts", t => t.HasCheckConstraint("valid_savings_balance", "\"Added\" >= 0 AND \"Spent\" >= 0 AND \"Spent\" <= \"Added\""));
-                });
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsEntry", b =>
-                {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<Guid>("UserId").HasColumnType("uuid");
-                    b.Property<Guid>("AccountId").HasColumnType("uuid");
-                    b.Property<string>("Kind").IsRequired().HasColumnType("text");
-                    b.Property<decimal>("Amount").HasPrecision(20, 4).HasColumnType("numeric(20,4)");
-                    b.Property<DateOnly>("Date").HasColumnType("date");
-                    b.Property<string>("Description").IsRequired().HasMaxLength(500).HasColumnType("character varying(500)");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.HasKey("Id");
-                    b.HasIndex("UserId", "AccountId", "Date", "CreatedAt", "Id");
-                    b.ToTable("SavingsEntries", t =>
-                        {
-                            t.HasCheckConstraint("positive_savings_amount", "\"Amount\" > 0");
-                            t.HasCheckConstraint("valid_savings_kind", "\"Kind\" IN ('deposit', 'withdrawal')");
-                        });
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId", "Date", "TaskId");
+
+                    b.HasIndex("UserId", "TaskId");
+
+                    b.ToTable("TaskCompletions");
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.User", b =>
@@ -381,32 +582,6 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.RecurringTask", b =>
-                {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<Guid>("UserId").HasColumnType("uuid");
-                    b.Property<string>("Name").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
-                    b.Property<int>("IntervalDays").HasColumnType("integer");
-                    b.Property<DateOnly>("StartDate").HasColumnType("date");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<bool>("Deleted").HasColumnType("boolean");
-                    b.Property<int>("Version").IsConcurrencyToken().HasColumnType("integer");
-                    b.HasKey("Id");
-                    b.HasAlternateKey("UserId", "Id");
-                    b.HasIndex("UserId", "Deleted", "CreatedAt", "Id");
-                    b.ToTable("RecurringTasks", t => t.HasCheckConstraint("valid_task_interval", "\"IntervalDays\" IN (1, 2, 3, 7)"));
-                });
-
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.TaskCompletion", b =>
-                {
-                    b.Property<Guid>("UserId").HasColumnType("uuid");
-                    b.Property<DateOnly>("Date").HasColumnType("date");
-                    b.Property<Guid>("TaskId").HasColumnType("uuid");
-                    b.HasKey("UserId", "Date", "TaskId");
-                    b.HasIndex("UserId", "TaskId");
-                    b.ToTable("TaskCompletions");
-                });
-
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Category", b =>
                 {
                     b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
@@ -452,27 +627,62 @@ namespace ExpenseTracker.Api.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.Income", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.IncomeCategory", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "CategoryId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.IncomeCategory", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.RecurringTask", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsAccount", b =>
                 {
-                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null).WithMany().HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.SavingsEntry", b =>
                 {
-                    b.HasOne("ExpenseTracker.Api.Infrastructure.SavingsAccount", null).WithMany().HasForeignKey("UserId", "AccountId")
-                        .HasPrincipalKey("UserId", "Id").OnDelete(DeleteBehavior.Restrict).IsRequired();
-                });
-            modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.RecurringTask", b =>
-                {
-                    b.HasOne("ExpenseTracker.Api.Infrastructure.User", null).WithMany().HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.SavingsAccount", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "AccountId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Infrastructure.TaskCompletion", b =>
                 {
-                    b.HasOne("ExpenseTracker.Api.Infrastructure.RecurringTask", null).WithMany().HasForeignKey("UserId", "TaskId")
-                        .HasPrincipalKey("UserId", "Id").OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("ExpenseTracker.Api.Infrastructure.RecurringTask", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "TaskId")
+                        .HasPrincipalKey("UserId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

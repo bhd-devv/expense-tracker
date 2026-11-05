@@ -5,7 +5,7 @@ namespace ExpenseTracker.Api.Features.Savings;
 
 public sealed record CreateSavingsRequest(Guid RequestId, string Name, string Currency);
 public sealed record SavingsEntryRequest(Guid RequestId, string Kind, string Amount, DateOnly Date, string Description);
-public sealed record SavingsAccountDto(Guid Id, string Name, string Currency, string Balance, string Added, string Spent);
+public sealed record SavingsAccountDto(Guid Id, string Name, string Currency, string Balance, string Added, string Spent, int Version);
 public sealed record SavingsAccountsDto(IReadOnlyList<SavingsAccountDto> Items);
 public sealed record SavingsEntryDto(Guid Id, string Kind, string Amount, DateOnly Date, string Description);
 public sealed record SavingsEntryPage(SavingsAccountDto Account, IReadOnlyList<SavingsEntryDto> Items, int Page, bool HasMore);
@@ -14,13 +14,13 @@ public sealed class SavingsService(Database db, TimeProvider clock)
 {
     public async Task<SavingsAccountsDto> List(User user, CancellationToken ct)
     {
-        var accounts = await db.SavingsAccounts.AsNoTracking().Where(x => x.UserId == user.Id)
+        var accounts = await db.SavingsAccounts.AsNoTracking().Where(x => x.UserId == user.Id && !x.Deleted)
             .OrderBy(x => x.Name).ThenBy(x => x.Id).ToArrayAsync(ct);
         return new(accounts.Select(x => View(x, user)).ToArray());
     }
 
     private async Task<SavingsAccount> Find(User user, Guid id, CancellationToken ct) =>
-        await db.SavingsAccounts.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == id, ct)
+        await db.SavingsAccounts.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == id && !x.Deleted, ct)
             ?? throw new ApiError("not_found", 404);
 
     public async Task<SavingsEntryPage> Entries(User user, Guid id, int page, CancellationToken ct)
@@ -44,11 +44,11 @@ public sealed class SavingsService(Database db, TimeProvider clock)
         var previous = await db.SavingsAccounts.SingleOrDefaultAsync(x => x.Id == input.RequestId, ct);
         if (previous is not null)
         {
-            if (previous.UserId != user.Id || previous.Name != name)
+            if (previous.UserId != user.Id || previous.Deleted || previous.Name != name)
                 throw new ApiError("conflict", 409);
             return View(previous, user);
         }
-        if (await db.SavingsAccounts.CountAsync(x => x.UserId == user.Id, ct) >= 50) throw new ApiError("savings_limit");
+        if (await db.SavingsAccounts.CountAsync(x => x.UserId == user.Id && !x.Deleted, ct) >= 50) throw new ApiError("savings_limit");
         var account = new SavingsAccount { Id = input.RequestId, UserId = user.Id, Name = name, Currency = user.Currency };
         db.Add(account);
         await db.SaveChangesAsync(ct);
@@ -80,10 +80,17 @@ public sealed class SavingsService(Database db, TimeProvider clock)
         if ((input.Kind == "deposit" ? account.Added : account.Spent) > maxTotal - amount)
             throw new ApiError("savings_total_limit");
         if (input.Kind == "deposit") account.Added += amount; else account.Spent += amount;
+        account.Version++;
         var entry = new SavingsEntry
         {
-            Id = input.RequestId, UserId = user.Id, AccountId = account.Id, Kind = input.Kind,
-            Amount = amount, Date = input.Date, Description = description, CreatedAt = clock.GetUtcNow()
+            Id = input.RequestId,
+            UserId = user.Id,
+            AccountId = account.Id,
+            Kind = input.Kind,
+            Amount = amount,
+            Date = input.Date,
+            Description = description,
+            CreatedAt = clock.GetUtcNow()
         };
         db.Add(entry);
         await db.SaveChangesAsync(ct);
@@ -91,7 +98,20 @@ public sealed class SavingsService(Database db, TimeProvider clock)
         return ViewEntry(entry);
     }
 
+    public async Task Delete(User user, Guid id, int version, CancellationToken ct)
+    {
+        await using var transaction = await db.LockUser(user, ct);
+        var account = await db.SavingsAccounts.SingleOrDefaultAsync(x => x.UserId == user.Id && x.Id == id, ct)
+            ?? throw new ApiError("not_found", 404);
+        if (account.Deleted && account.Version == version + 1) return;
+        if (account.Deleted || account.Version != version) throw new ApiError("conflict", 409);
+        account.Deleted = true;
+        account.Version++;
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
     private static SavingsAccountDto View(SavingsAccount account, User user) => new(account.Id, account.Name, user.Currency,
-        Rules.Money(account.Added - account.Spent), Rules.Money(account.Added), Rules.Money(account.Spent));
+        Rules.Money(account.Added - account.Spent), Rules.Money(account.Added), Rules.Money(account.Spent), account.Version);
     private static SavingsEntryDto ViewEntry(SavingsEntry entry) => new(entry.Id, entry.Kind, Rules.Money(entry.Amount), entry.Date, entry.Description);
 }

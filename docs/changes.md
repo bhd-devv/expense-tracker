@@ -3,6 +3,9 @@
 Цей файл генерується командою `python3 scripts/check_docs.py --write-index`.
 Детальні записи зберігаються в `.agents/changelog/`.
 
+- 033 — [Видиме видалення накопичувальних рахунків](../.agents/changelog/033-delete-savings.md)
+- 032 — [Доходи з окремими категоріями](../.agents/changelog/032-incomes.md)
+- 031 — [Компактний дизайн трекера завдань із модальними вікнами](../.agents/changelog/031-tasks-premium-design.md)
 - 030 — [Бот лише відкриває витрати та завдання](../.agents/changelog/030-launcher-only-bot.md)
 - 029 — [Окремий вебзастосунок регулярних завдань](../.agents/changelog/029-recurring-tasks-web-app.md)
 - 028 — [Компактні екрани та валюта з налаштувань](../.agents/changelog/028-compact-layout-profile-currency.md)

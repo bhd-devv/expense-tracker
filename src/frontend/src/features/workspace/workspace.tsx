@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChartPie,
+  TrendingUp,
   House,
   PencilLine,
   ReceiptText,
@@ -64,11 +65,14 @@ import {
 import IconPicker from "@/features/categories/icon-picker";
 import CategoryLimit from "@/features/categories/category-limit";
 import Savings from "@/features/savings/savings";
+import Incomes from "@/features/incomes/incomes";
 
 type Tab =
   | "overview"
   | "expenses"
   | "reports"
+  | "incomes"
+  | "incomeCategories"
   | "categories"
   | "settings"
   | "savings";
@@ -84,7 +88,7 @@ const currencies = ["UAH", "USD", "EUR", "GBP", "PLN", "JPY"];
 const nav = [
   { key: "overview", Icon: House },
   { key: "expenses", Icon: ReceiptText },
-  { key: "reports", Icon: ChartPie },
+  { key: "incomes", Icon: TrendingUp },
   { key: "categories", Icon: Tags },
   { key: "settings", Icon: Settings2 },
 ] as const;
@@ -126,6 +130,7 @@ export default function Workspace() {
   const [booting, setBooting] = useState(true);
   const [botName, setBotName] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
+  const [incomeRefresh, setIncomeRefresh] = useState(0);
   const [notice, setNotice] = useState("");
   const [fault, setFault] = useState("");
   const [busy, setBusy] = useState(false);
@@ -232,7 +237,8 @@ export default function Workspace() {
     const back =
       app?.initData && app.isVersionAtLeast("6.1") ? app.BackButton : undefined;
     if (!back) return;
-    const goBack = () => setTab("overview");
+    const goBack = () =>
+      setTab(tab === "incomeCategories" ? "incomes" : "overview");
     if (tab !== "overview" && !editor) {
       back.show();
       back.onClick(goBack);
@@ -421,8 +427,16 @@ export default function Workspace() {
             <button
               key={key}
               aria-label={t[key]}
-              aria-current={tab === key ? "page" : undefined}
-              className={tab === key ? "selected" : ""}
+              aria-current={
+                tab === key || (key === "incomes" && tab === "incomeCategories")
+                  ? "page"
+                  : undefined
+              }
+              className={
+                tab === key || (key === "incomes" && tab === "incomeCategories")
+                  ? "selected"
+                  : ""
+              }
               data-desktop-only={key === "expenses"}
               onClick={() => {
                 setFault("");
@@ -447,7 +461,12 @@ export default function Workspace() {
             className="icon-button"
             aria-label={t.refresh}
             disabled={busy}
-            onClick={() => void action(load)}
+            onClick={() =>
+              void action(async () => {
+                await load();
+                setIncomeRefresh((value) => value + 1);
+              })
+            }
           >
             <RefreshCw
               className={busy ? "spin" : ""}
@@ -461,28 +480,31 @@ export default function Workspace() {
         ) : (
           <section className="page-heading">
             <h1>{t[tab]}</h1>
-            {tab !== "settings" && tab !== "savings" && (
-              <button
-                className="button primary"
-                onClick={() => {
-                  if (tab === "categories") {
-                    document.getElementById(`${tab}-name`)?.focus();
-                    return;
-                  }
-                  setTab("overview");
-                  if (inputMode === "manual") {
-                    void createDraft();
-                    return;
-                  }
-                  requestAnimationFrame(() =>
-                    document.getElementById("quick-add")?.focus(),
-                  );
-                }}
-              >
-                <Plus size={20} />
-                {t.add}
-              </button>
-            )}
+            {tab !== "settings" &&
+              tab !== "savings" &&
+              tab !== "incomes" &&
+              tab !== "incomeCategories" && (
+                <button
+                  className="button primary"
+                  onClick={() => {
+                    if (tab === "categories") {
+                      document.getElementById(`${tab}-name`)?.focus();
+                      return;
+                    }
+                    setTab("overview");
+                    if (inputMode === "manual") {
+                      void createDraft();
+                      return;
+                    }
+                    requestAnimationFrame(() =>
+                      document.getElementById("quick-add")?.focus(),
+                    );
+                  }}
+                >
+                  <Plus size={20} />
+                  {t.add}
+                </button>
+              )}
           </section>
         )}
         {(fault || notice) && (
@@ -527,7 +549,10 @@ export default function Workspace() {
             </div>
           </div>
         ) : (
-          <div className="workspace-view" key={tab}>
+          <div
+            className="workspace-view"
+            key={tab === "incomeCategories" ? "incomes" : tab}
+          >
             {tab === "overview" && (
               <>
                 <div className="overview-grid">
@@ -646,6 +671,14 @@ export default function Workspace() {
                 </div>
                 <button
                   className="savings-home-link"
+                  onClick={() => setTab("reports")}
+                >
+                  <ChartPie size={24} aria-hidden="true" />
+                  <span>{t.reports}</span>
+                  <ChevronRight size={20} aria-hidden="true" />
+                </button>
+                <button
+                  className="savings-home-link"
                   onClick={() => setTab("savings")}
                 >
                   <PiggyBank size={24} aria-hidden="true" />
@@ -662,6 +695,17 @@ export default function Workspace() {
                   </button>
                 </div>
               </>
+            )}
+            {(tab === "incomes" || tab === "incomeCategories") && (
+              <Incomes
+                profile={profile}
+                lang={lang}
+                t={t}
+                refreshVersion={incomeRefresh}
+                categoriesView={tab === "incomeCategories"}
+                onCategories={() => setTab("incomeCategories")}
+                onIncomes={() => setTab("incomes")}
+              />
             )}
             {tab === "savings" && (
               <Savings
@@ -924,19 +968,30 @@ export default function Workspace() {
               </section>
             )}
             {tab === "categories" && (
-              <CatalogEditor
-                key={tab}
-                items={data.catalog.categories}
-                defaultCurrency={profile.currency}
-                lang={lang}
-                t={t}
-                busy={busy}
-                perform={action}
-                reload={async () => {
-                  await load();
-                  setProfile(await request("/profile", profileSchema));
-                }}
-              />
+              <>
+                <button
+                  className="savings-home-link"
+                  onClick={() => setTab("incomeCategories")}
+                >
+                  <TrendingUp size={24} aria-hidden="true" />
+                  <span>{t.incomeCategories}</span>
+                  <ChevronRight size={20} aria-hidden="true" />
+                </button>
+                <h2>{t.expenseCategories}</h2>
+                <CatalogEditor
+                  key={tab}
+                  items={data.catalog.categories}
+                  defaultCurrency={profile.currency}
+                  lang={lang}
+                  t={t}
+                  busy={busy}
+                  perform={action}
+                  reload={async () => {
+                    await load();
+                    setProfile(await request("/profile", profileSchema));
+                  }}
+                />
+              </>
             )}
             {tab === "settings" && (
               <Preferences
@@ -956,6 +1011,9 @@ export default function Workspace() {
                   void action(async () => {
                     await request("/auth/logout", nothing, "POST");
                     sessionStorage.removeItem("lime-draft");
+                    sessionStorage.removeItem(
+                      `lime-income-pending-${profile.id}`,
+                    );
                     setProfile(undefined);
                     setFault(t.signedOut);
                   })

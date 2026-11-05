@@ -132,6 +132,160 @@
         }
       }
     },
+    "/api/savings": {
+      "get": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavingsAccountsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSavingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavingsAccountDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/savings/{id}": {
+      "delete": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/savings/{id}/entries": {
+      "get": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavingsEntryPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavingsEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavingsEntryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/profile": {
       "get": {
         "tags": [
@@ -190,6 +344,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CatalogDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/category-icons": {
+      "get": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryIconLibraryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/categories/{id}/limit": {
+      "put": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryLimitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogItemDto"
                 }
               }
             }
@@ -688,6 +901,424 @@
         }
       }
     },
+    "/api/tasks": {
+      "get": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringTaskDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
+      "put": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/completion": {
+      "put": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/income-categories": {
+      "get": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncomeCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/income-categories/{id}": {
+      "put": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncomeCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogItemDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/incomes": {
+      "get": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomePage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIncomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomeDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/incomes/{id}": {
+      "put": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncomeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomeDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ExpenseTracker.Api"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/internal/bot/inbox": {
       "post": {
         "tags": [
@@ -774,342 +1405,6 @@
           }
         }
       }
-    },
-    "/api/category-icons": {
-      "get": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CategoryIconLibraryDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/categories/{id}/limit": {
-      "put": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CategoryLimitRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CatalogItemDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/savings": {
-      "get": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavingsAccountsDto"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavingsAccountDto"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSavingsRequest"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/savings/{id}/entries": {
-      "get": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavingsEntryPage"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "int32"
-            }
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavingsEntryDto"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SavingsEntryRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ]
-      }
-    },
-    "/api/tasks": {
-      "get": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "date",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskListDto"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RecurringTaskDto"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTaskRequest"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/tasks/{id}": {
-      "put": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RenameTaskRequest"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "delete": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "version",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          }
-        }
-      }
-    },
-    "/api/tasks/{id}/completion": {
-      "put": {
-        "tags": [
-          "ExpenseTracker.Api"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskCompletionRequest"
-              }
-            }
-          },
-          "required": true
-        }
-      }
     }
   },
   "components": {
@@ -1162,19 +1457,17 @@
             "type": [
               "null",
               "string"
-            ],
-            "default": null
+            ]
           },
           "limit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CategoryLimitDto"
-              },
+            "oneOf": [
               {
                 "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CategoryLimitDto"
               }
-            ],
-            "default": null
+            ]
           }
         }
       },
@@ -1200,8 +1493,134 @@
             "type": [
               "null",
               "string"
-            ],
-            "default": null
+            ]
+          }
+        }
+      },
+      "CategoryIconDto": {
+        "required": [
+          "id",
+          "uk",
+          "en",
+          "symbol"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "uk": {
+            "type": "string"
+          },
+          "en": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          }
+        }
+      },
+      "CategoryIconGroupDto": {
+        "required": [
+          "id",
+          "uk",
+          "en",
+          "icons"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "uk": {
+            "type": "string"
+          },
+          "en": {
+            "type": "string"
+          },
+          "icons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryIconDto"
+            }
+          }
+        }
+      },
+      "CategoryIconLibraryDto": {
+        "required": [
+          "groups"
+        ],
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryIconGroupDto"
+            }
+          }
+        }
+      },
+      "CategoryLimitDto": {
+        "required": [
+          "amount",
+          "currency",
+          "spent",
+          "usedPercent",
+          "exceeded",
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "spent": {
+            "type": "string"
+          },
+          "usedPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "exceeded": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "CategoryLimitRequest": {
+        "required": [
+          "amount",
+          "currency",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1223,8 +1642,86 @@
             "type": [
               "null",
               "string"
+            ]
+          }
+        }
+      },
+      "CreateIncomeRequest": {
+        "required": [
+          "requestId",
+          "amount",
+          "categoryId",
+          "description",
+          "date"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string"
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
             ],
-            "default": null
+            "format": "date"
+          }
+        }
+      },
+      "CreateSavingsRequest": {
+        "required": [
+          "requestId",
+          "name",
+          "currency"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "required": [
+          "requestId",
+          "name",
+          "intervalDays",
+          "startDate"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "intervalDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
           }
         }
       },
@@ -1463,6 +1960,131 @@
           }
         }
       },
+      "IncomeCategoryRequest": {
+        "required": [
+          "requestId",
+          "name",
+          "icon",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "IncomeDto": {
+        "required": [
+          "id",
+          "amount",
+          "currency",
+          "categoryId",
+          "description",
+          "date",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "IncomeInput": {
+        "required": [
+          "amount",
+          "categoryId",
+          "description",
+          "date",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "IncomePage": {
+        "required": [
+          "items",
+          "page",
+          "hasMore",
+          "total",
+          "currency"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncomeDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      },
       "JsonElement": {},
       "LeaseDto": {
         "required": [
@@ -1551,8 +2173,7 @@
             "type": [
               "null",
               "string"
-            ],
-            "default": null
+            ]
           }
         }
       },
@@ -1610,6 +2231,65 @@
         "properties": {
           "botUsername": {
             "type": "string"
+          }
+        }
+      },
+      "RecurringTaskDto": {
+        "required": [
+          "id",
+          "name",
+          "intervalDays",
+          "startDate",
+          "version",
+          "isDue",
+          "completed",
+          "canComplete"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "intervalDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isDue": {
+            "type": "boolean"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "canComplete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RenameTaskRequest": {
+        "required": [
+          "name",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1679,194 +2359,6 @@
           }
         }
       },
-      "VersionRequest": {
-        "required": [
-          "version"
-        ],
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "CategoryIconDto": {
-        "required": [
-          "id",
-          "uk",
-          "en",
-          "symbol"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "uk": {
-            "type": "string"
-          },
-          "en": {
-            "type": "string"
-          },
-          "symbol": {
-            "type": "string"
-          }
-        }
-      },
-      "CategoryIconGroupDto": {
-        "required": [
-          "id",
-          "uk",
-          "en",
-          "icons"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "uk": {
-            "type": "string"
-          },
-          "en": {
-            "type": "string"
-          },
-          "icons": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CategoryIconDto"
-            }
-          }
-        }
-      },
-      "CategoryIconLibraryDto": {
-        "required": [
-          "groups"
-        ],
-        "type": "object",
-        "properties": {
-          "groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CategoryIconGroupDto"
-            }
-          }
-        }
-      },
-      "CategoryLimitDto": {
-        "required": [
-          "amount",
-          "currency",
-          "spent",
-          "usedPercent",
-          "from",
-          "to",
-          "exceeded"
-        ],
-        "type": "object",
-        "properties": {
-          "amount": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "spent": {
-            "type": "string"
-          },
-          "usedPercent": {
-            "type": "number",
-            "format": "double"
-          },
-          "from": {
-            "type": "string",
-            "format": "date"
-          },
-          "to": {
-            "type": "string",
-            "format": "date"
-          },
-          "exceeded": {
-            "type": "boolean"
-          }
-        }
-      },
-      "CategoryLimitRequest": {
-        "required": [
-          "amount",
-          "currency",
-          "version"
-        ],
-        "type": "object",
-        "properties": {
-          "amount": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "currency": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "CreateSavingsRequest": {
-        "required": [
-          "requestId",
-          "name",
-          "currency"
-        ],
-        "type": "object",
-        "properties": {
-          "requestId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string"
-          }
-        }
-      },
-      "SavingsEntryRequest": {
-        "required": [
-          "requestId",
-          "kind",
-          "amount",
-          "date",
-          "description"
-        ],
-        "type": "object",
-        "properties": {
-          "requestId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "amount": {
-            "type": "string"
-          },
-          "date": {
-            "type": "string",
-            "format": "date"
-          },
-          "description": {
-            "type": "string"
-          }
-        }
-      },
       "SavingsAccountDto": {
         "required": [
           "id",
@@ -1874,7 +2366,8 @@
           "currency",
           "balance",
           "added",
-          "spent"
+          "spent",
+          "version"
         ],
         "type": "object",
         "properties": {
@@ -1896,6 +2389,10 @@
           },
           "spent": {
             "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1969,12 +2466,13 @@
           }
         }
       },
-      "CreateTaskRequest": {
+      "SavingsEntryRequest": {
         "required": [
           "requestId",
-          "name",
-          "intervalDays",
-          "startDate"
+          "kind",
+          "amount",
+          "date",
+          "description"
         ],
         "type": "object",
         "properties": {
@@ -1982,32 +2480,18 @@
             "type": "string",
             "format": "uuid"
           },
-          "name": {
+          "kind": {
             "type": "string"
           },
-          "intervalDays": {
-            "type": "integer",
-            "format": "int32"
+          "amount": {
+            "type": "string"
           },
-          "startDate": {
+          "date": {
             "type": "string",
             "format": "date"
-          }
-        }
-      },
-      "RenameTaskRequest": {
-        "required": [
-          "name",
-          "version"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
           },
-          "version": {
-            "type": "integer",
-            "format": "int32"
+          "description": {
+            "type": "string"
           }
         }
       },
@@ -2032,49 +2516,6 @@
           }
         }
       },
-      "RecurringTaskDto": {
-        "required": [
-          "id",
-          "name",
-          "intervalDays",
-          "startDate",
-          "version",
-          "isDue",
-          "completed",
-          "canComplete"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "intervalDays": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "startDate": {
-            "type": "string",
-            "format": "date"
-          },
-          "version": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "isDue": {
-            "type": "boolean"
-          },
-          "completed": {
-            "type": "boolean"
-          },
-          "canComplete": {
-            "type": "boolean"
-          }
-        }
-      },
       "TaskListDto": {
         "required": [
           "today",
@@ -2096,6 +2537,18 @@
             "items": {
               "$ref": "#/components/schemas/RecurringTaskDto"
             }
+          }
+        }
+      },
+      "VersionRequest": {
+        "required": [
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       }

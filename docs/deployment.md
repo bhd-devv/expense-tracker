@@ -247,3 +247,28 @@ PostgreSQL із міграцією, ownership/CSRF, точність гроше�
 відповіді. Browser: 320/360/390/430 px і desktop, uk/en × light/dark.
 Окремо — Telegram inline auth, cookie/CSRF через HTTPS і Coolify routing.
 Ці runtime перевірки та міграції в задачі спрощення бота не виконувались.
+
+## Доходи та категорії доходів
+
+Міграція `20261105150655_AddIncomes` додає `IncomeCategories` і `Incomes`
+без зміни наявних фінансових таблиць. Застосовуйте її окремим migrate job
+після перевірки backup, перед новим backend і frontend. Нових env-змінних
+немає. Бот продовжує відкривати `/` і `/tasks`; доходи доступні всередині
+Mini App. Старі клієнти витрат сумісні. При rollback images залиште нові
+таблиці й дані; Down навмисно відхилено для збереження фінансової історії.
+Локальна перевірка на PostgreSQL 14 не підтверджує production PostgreSQL 17
+або release у Coolify.
+
+## Видалення накопичувальних рахунків
+
+`20261105152920_AddSavingsDeletion` додає `Deleted=false` і `Version=1` до
+наявних `SavingsAccounts`. Перед release перевірте backup й застосуйте
+міграцію штатним migrate job. Зупиніть попередній backend до запуску нового:
+старий код не інкрементує version і не приховує Deleted. Потім оновіть
+frontend. Старий frontend може читати нові DTO з додатковим полем version.
+Нових env-змінних і змін бота немає.
+
+Після першого видалення rollback дозволено лише на backend, що підтримує
+Deleted: старі images знову покажуть видалені рахунки та дозволять операції
+з ними. Down навмисно відхилено. Локальні тести на PostgreSQL 14 не
+підтверджують production PostgreSQL 17 або release у Coolify.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -9,11 +9,13 @@ import {
   PiggyBank,
   Plus,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { z } from "zod";
 import {
   ApiError,
   request,
+  nothing,
   savingsAccountSchema,
   savingsAccountsSchema,
   savingsEntrySchema,
@@ -23,6 +25,11 @@ import {
 import { money, type Copy, type Language } from "@/lib/i18n";
 
 const pendingSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("delete-account"),
+    accountId: z.string().uuid(),
+    version: z.number().int(),
+  }),
   z.object({
     kind: z.literal("account"),
     body: z.object({
@@ -65,6 +72,7 @@ export default function Savings({
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const [fault, setFault] = useState("");
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
@@ -96,23 +104,30 @@ export default function Savings({
   }
   const load = useCallback(async () => {
     const list = await request("/savings", savingsAccountsSchema);
-    const entries = selected
-      ? await request(
-          `/savings/${selected}/entries?page=${page}`,
-          savingsPageSchema,
-        )
-      : undefined;
-    return { list, entries };
+    const missing =
+      !!selected && !list.items.some((item) => item.id === selected);
+    const entries =
+      selected && !missing
+        ? await request(
+            `/savings/${selected}/entries?page=${page}`,
+            savingsPageSchema,
+          )
+        : undefined;
+    return { list, entries, missing };
   }, [selected, page]);
   useEffect(() => {
     let active = true;
     const refresh = () => {
       setLoading(true);
       void load()
-        .then(({ list, entries }) => {
+        .then(({ list, entries, missing }) => {
           if (!active) return;
           setAccounts(list);
           setHistory(entries);
+          if (missing) {
+            setSelected("");
+            setPage(0);
+          }
         })
         .catch((error: unknown) => {
           if (active)
@@ -137,9 +152,13 @@ export default function Savings({
     setLoading(true);
     setFault("");
     try {
-      const { list, entries } = await load();
+      const { list, entries, missing } = await load();
       setAccounts(list);
       setHistory(entries);
+      if (missing) {
+        setSelected("");
+        setPage(0);
+      }
     } catch (error) {
       setFault(errorText(error));
     } finally {
@@ -147,7 +166,8 @@ export default function Savings({
     }
   }
   async function save(operation: Pending) {
-    if (busy) return;
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     setFault("");
     setNotice("");
@@ -167,6 +187,25 @@ export default function Savings({
         setPage(0);
         setCreating(false);
         setName("");
+      } else if (operation.kind === "delete-account") {
+        await request(
+          `/savings/${operation.accountId}?version=${operation.version}`,
+          nothing,
+          "DELETE",
+        );
+        setAccounts((current) =>
+          current
+            ? {
+                items: current.items.filter(
+                  (item) => item.id !== operation.accountId,
+                ),
+              }
+            : current,
+        );
+        setSelected("");
+        setPage(0);
+        setAmount("");
+        setDescription("");
       } else {
         await request(
           `/savings/${operation.accountId}/entries`,
@@ -181,7 +220,13 @@ export default function Savings({
       }
       sessionStorage.removeItem(storageKey);
       setPending(undefined);
-      setNotice(operation.kind === "account" ? t.updated : t.savingsSaved);
+      setNotice(
+        operation.kind === "delete-account"
+          ? t.savingsDeleted
+          : operation.kind === "account"
+            ? t.updated
+            : t.savingsSaved,
+      );
       // A refresh failure must never resubmit the operation.
       setHistory(undefined);
       setRevision((value) => value + 1);
@@ -194,8 +239,22 @@ export default function Savings({
       }
       setFault(knownRejection ? errorText(error) : t.savingsUnknown);
     } finally {
+      saving.current = false;
       setBusy(false);
     }
+  }
+  function deleteAccount(value: z.infer<typeof savingsAccountSchema>) {
+    if (
+      busy ||
+      pending ||
+      !window.confirm(`${t.confirmDeleteSavings}\n${value.name}`)
+    )
+      return;
+    void save({
+      kind: "delete-account",
+      accountId: value.id,
+      version: value.version,
+    });
   }
   const account =
     history?.account.id === selected
@@ -265,28 +324,39 @@ export default function Savings({
         <>
           <div className="savings-list">
             {accounts?.items.map((item) => (
-              <button
-                className="savings-account"
-                key={item.id}
-                disabled={busy}
-                onClick={() => {
-                  setSelected(item.id);
-                  setPage(0);
-                  setHistory(undefined);
-                  setFault("");
-                  setNotice("");
-                }}
-              >
-                <PiggyBank size={24} aria-hidden="true" />
-                <span>
-                  <strong>{item.name}</strong>
-                  <small>{t.savingsBalance}</small>
-                </span>
-                <strong className="money">
-                  {money(item.balance, item.currency, lang)}
-                </strong>
-                <ChevronRight size={20} aria-hidden="true" />
-              </button>
+              <div className="savings-account-row" key={item.id}>
+                <button
+                  className="savings-account"
+                  disabled={busy}
+                  onClick={() => {
+                    setSelected(item.id);
+                    setPage(0);
+                    setHistory(undefined);
+                    setFault("");
+                    setNotice("");
+                  }}
+                >
+                  <PiggyBank size={24} aria-hidden="true" />
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>{t.savingsBalance}</small>
+                  </span>
+                  <strong className="money">
+                    {money(item.balance, item.currency, lang)}
+                  </strong>
+                  <ChevronRight size={20} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button danger"
+                  aria-label={`${t.deleteSavings}: ${item.name}`}
+                  title={t.deleteSavings}
+                  disabled={locked}
+                  onClick={() => deleteAccount(item)}
+                >
+                  <Trash2 size={20} aria-hidden="true" />
+                </button>
+              </div>
             ))}
             {accounts && !accounts.items.length && (
               <p className="empty">{t.emptySavings}</p>
@@ -349,7 +419,18 @@ export default function Savings({
         account && (
           <>
             <div className="panel savings-summary">
-              <h2>{account.name}</h2>
+              <div className="savings-summary-heading">
+                <h2>{account.name}</h2>
+                <button
+                  type="button"
+                  className="quiet danger"
+                  disabled={locked}
+                  onClick={() => deleteAccount(account)}
+                >
+                  <Trash2 size={20} aria-hidden="true" />
+                  {t.deleteSavings}
+                </button>
+              </div>
               <p>{t.savingsBalance}</p>
               <strong className="report-total">
                 {money(account.balance, account.currency, lang)}

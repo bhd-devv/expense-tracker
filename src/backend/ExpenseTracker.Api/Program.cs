@@ -11,6 +11,7 @@ using ExpenseTracker.Api.Features.Expenses;
 using ExpenseTracker.Api.Features.Users;
 using ExpenseTracker.Api.Features.Savings;
 using ExpenseTracker.Api.Features.Tasks;
+using ExpenseTracker.Api.Features.Incomes;
 using ExpenseTracker.Api.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -60,6 +61,7 @@ try
     builder.Services.AddScoped<CatalogService>();
     builder.Services.AddScoped<SavingsService>();
     builder.Services.AddScoped<TaskService>();
+    builder.Services.AddScoped<IncomeService>();
     builder.Services.AddScoped<ExpenseService>();
     builder.Services.AddSingleton<TelegramBotIdentity>();
     builder.Services.AddHttpClient("TelegramIdentity", client =>
@@ -197,6 +199,7 @@ try
     app.MapAuth();
     app.MapGroup("/api").RequireAuthorization("Browser").RequireRateLimiting("workspace").MapWorkspace();
     app.MapGroup("/api").RequireAuthorization("Browser").RequireRateLimiting("workspace").MapTasks();
+    app.MapGroup("/api").RequireAuthorization("Browser").RequireRateLimiting("workspace").MapIncomes();
     app.MapBot();
     app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("API started"));
     app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogInformation("API stopping"));

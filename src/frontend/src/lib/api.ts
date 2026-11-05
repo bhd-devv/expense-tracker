@@ -68,6 +68,7 @@ export const savingsAccountSchema: z.ZodType<
   balance: z.string(),
   added: z.string(),
   spent: z.string(),
+  version: z.number().int().default(1),
 });
 export const savingsAccountsSchema: z.ZodType<
   components["schemas"]["SavingsAccountsDto"]

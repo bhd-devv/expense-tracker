@@ -133,12 +133,19 @@ Idempotency key не є дозволом на прихований retry. Піс
 ## Окремий журнал накопичень
 
 Feature `Savings` на .NET обслуговує `/api/savings`: GET списку, POST
-створення та GET/POST `/{id}/entries`. Усі запити browser-session scoped.
+створення, DELETE `/{id}?version=...` та GET/POST `/{id}/entries`.
+Усі запити browser-session scoped.
 Приватних bot workspace endpoints немає.
 `SavingsAccounts` зберігає власника, назву, legacy валюту, decimal-підсумки
 Added/Spent (`numeric(28,4)`). `SavingsEntries` — незмінні операції із
 `numeric(20,4)` сумою та composite FK `(UserId, AccountId)` до рахунка.
-Account/entry ID є request ID; дані незмінні, тому окремий hash не потрібен.
+Account/entry ID є request ID; поля створення рахунка та операції незмінні,
+тому окремий hash не потрібен. Account містить version і Deleted tombstone.
+Кожен новий entry змінює version, повтор entry її не змінює. Видалення під
+owner lock перевіряє version; точний повтор повертає 204. Deleted accounts
+не доступні через list/history/add/create retry; journal залишається для
+службової цілісності, ID не перевикористовується. [ADR-022](knowledge/decisions.md)
+визначає migration і заборону rollback на backend, що ігнорує Deleted.
 Owner advisory lock захищає залишок, totals+entry зберігаються одним commit.
 DB checks захищають додатну суму, kind і невід'ємний залишок. Зв'язків із
 Expense/Category немає. Деталі — [product](product.md).
@@ -166,3 +173,20 @@ Owner advisory lock серіалізує читання визначень/ві�
 профілю. Frontend валідує відповіді Zod та показує серверні flags.
 Контракт і клієнтські DTO — у спільній OpenAPI-схемі. Python-моделі
 генеруються лише з inbox endpoints; фінансові й task DTO до них не входять. Межі — [ADR-019](knowledge/decisions.md).
+
+## Облік доходів
+
+Feature `Incomes` обслуговує browser-only `/api/incomes` і
+`/api/income-categories` (GET/POST та PUT/DELETE за ID). DTO генеруються
+через спільну OpenAPI; Zod перевіряє JSON на frontend. Auth/CSRF та
+власник використовують чинний browser context. До приватного bot API
+ці контракти не входять.
+
+Окремі `IncomeCategories` і `Incomes` мають owner, version, tombstone
+Deleted та незмінний CreateHash. Income містить decimal `numeric(20,4)`,
+дату, опис і composite ownership FK до категорії. Request ID стає PK;
+owner advisory lock захищає коротку мутацію/читання підсумку й списку.
+Створення повторюється лише з тим самим нормалізованим hash; tombstone
+не дає відновити видалене старим запитом. Категорії витрат, AI draft,
+звітів витрат і накопичень не змінюються. Деталі —
+[ADR-021](knowledge/decisions.md) і [product](product.md).

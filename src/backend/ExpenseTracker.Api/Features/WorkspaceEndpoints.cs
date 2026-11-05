@@ -14,6 +14,11 @@ public static class WorkspaceEndpoints
             await savings.List(await users.Current(context, ct), ct));
         group.MapPost("/savings", async (CreateSavingsRequest input, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
             await savings.Create(await users.Current(context, ct), input, ct));
+        group.MapDelete("/savings/{id:guid}", async (Guid id, int version, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
+        {
+            await savings.Delete(await users.Current(context, ct), id, version, ct);
+            return Results.NoContent();
+        });
         group.MapGet("/savings/{id:guid}/entries", async (Guid id, int? page, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>
             await savings.Entries(await users.Current(context, ct), id, page ?? 0, ct));
         group.MapPost("/savings/{id:guid}/entries", async (Guid id, SavingsEntryRequest input, HttpContext context, UserService users, SavingsService savings, CancellationToken ct) =>

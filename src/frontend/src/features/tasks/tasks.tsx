@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   CircleCheck,
   Leaf,
-  PencilLine,
+  MoreHorizontal,
+  Repeat2,
   Plus,
   RefreshCw,
   Trash2,
-  X,
 } from "lucide-react";
 import {
   ApiError,
@@ -32,8 +35,14 @@ import {
   type TaskCompletion,
 } from "./api";
 import { frequency, taskCopy } from "./copy";
+import { shiftDate, weekDates } from "./calendar";
+import { TaskDialog } from "./task-dialog";
 
-type Editor = { kind: "create" } | { kind: "rename"; task: RecurringTask };
+type Editor =
+  | { kind: "create" }
+  | { kind: "manage"; task: RecurringTask }
+  | { kind: "delete"; task: RecurringTask }
+  | { kind: "date" };
 
 export default function Tasks() {
   const [profile, setProfile] = useState<Profile>();
@@ -77,9 +86,12 @@ export default function Tasks() {
     <main className="tasks-shell">
       <header className="tasks-header">
         <span className="tasks-brand">
-          <Leaf size={24} aria-hidden="true" /> Lime
+          <span className="tasks-brand-mark">
+            <Leaf size={20} aria-hidden="true" />
+          </span>{" "}
+          Lime
         </span>
-        <h1>{t.title}</h1>
+        <span className="tasks-app-name">{t.title}</span>
       </header>
       {profile ? (
         <TaskBoard key={profile.id} profile={profile} />
@@ -120,12 +132,16 @@ function TaskBoard({ profile }: { profile: Profile }) {
   const [name, setName] = useState("");
   const [intervalDays, setIntervalDays] = useState(1);
   const [startDate, setStartDate] = useState(profile.today);
+  const [calendarDate, setCalendarDate] = useState(profile.today);
   const nameInput = useRef<HTMLInputElement>(null);
+  const dateInput = useRef<HTMLInputElement>(null);
+  const deleteCancel = useRef<HTMLButtonElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
+  const refreshButton = useRef<HTMLButtonElement>(null);
   const editorTrigger = useRef<HTMLButtonElement | null>(null);
   const restoreFocus = useRef(false);
   const busyRef = useRef(false);
-  const loadSequence = useRef(0);
+  const loadSequence = useRef({ value: 0 });
   const storageKey = `lime-tasks-pending-${profile.id}`;
   const [pending, setPending] = useState<PendingTask | undefined>(() => {
     try {
@@ -149,17 +165,17 @@ function TaskBoard({ profile }: { profile: Profile }) {
     return error.status >= 500 || error.status === 0 ? t.connection : t.invalid;
   }
 
-  const load = useCallback(async () => {
-    if (busyRef.current) return;
-    const sequence = ++loadSequence.current;
-    setLoading(true);
-    try {
-      const next = await readTasks(date);
-      if (sequence !== loadSequence.current) return;
-      setData(next);
-      setFault("");
-    } catch (error) {
-      if (sequence === loadSequence.current)
+  const load = useCallback(() => {
+    if (busyRef.current) return Promise.resolve();
+    const sequence = ++loadSequence.current.value;
+    return readTasks(date)
+      .then((next) => {
+        if (sequence !== loadSequence.current.value) return;
+        setData(next);
+        setFault("");
+      })
+      .catch((error: unknown) => {
+        if (sequence !== loadSequence.current.value) return;
         setFault(
           error instanceof ApiError && error.status === 401
             ? t.signIn
@@ -167,12 +183,14 @@ function TaskBoard({ profile }: { profile: Profile }) {
               ? t.rateLimit
               : t.connection,
         );
-    } finally {
-      if (sequence === loadSequence.current) setLoading(false);
-    }
+      })
+      .finally(() => {
+        if (sequence === loadSequence.current.value) setLoading(false);
+      });
   }, [date, t]);
 
   useEffect(() => {
+    const sequence = loadSequence.current;
     void load();
     const refresh = () => {
       void load();
@@ -185,7 +203,7 @@ function TaskBoard({ profile }: { profile: Profile }) {
     // Refresh local "today" even when the app stays open across midnight.
     const timer = window.setInterval(refresh, 60_000);
     return () => {
-      ++loadSequence.current;
+      ++sequence.value;
       window.clearInterval(timer);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", visible);
@@ -193,13 +211,23 @@ function TaskBoard({ profile }: { profile: Profile }) {
   }, [load]);
 
   useEffect(() => {
-    if (editor) nameInput.current?.focus();
+    if (editor?.kind === "create" || editor?.kind === "manage")
+      nameInput.current?.focus();
+    if (editor?.kind === "date") dateInput.current?.focus();
+    if (editor?.kind === "delete") deleteCancel.current?.focus();
   }, [editor]);
 
   useEffect(() => {
-    if (restoreFocus.current && !editor && !loading && !busy && !pending) {
+    if (restoreFocus.current && !editor && !loading && !busy) {
       restoreFocus.current = false;
-      (editorTrigger.current ?? addButton.current)?.focus();
+      const trigger = editorTrigger.current;
+      const target =
+        trigger?.isConnected && !trigger.disabled
+          ? trigger
+          : pending
+            ? refreshButton.current
+            : addButton.current;
+      target?.focus();
     }
   }, [editor, loading, busy, pending]);
 
@@ -218,7 +246,7 @@ function TaskBoard({ profile }: { profile: Profile }) {
       return;
     }
     busyRef.current = true;
-    ++loadSequence.current;
+    ++loadSequence.current.value;
     setBusy(true);
     setPending(operation);
     setFault("");
@@ -228,8 +256,7 @@ function TaskBoard({ profile }: { profile: Profile }) {
       sessionStorage.removeItem(storageKey);
       setPending(undefined);
       setNotice(t.updated);
-      if (operation.kind === "create" || operation.kind === "rename")
-        closeEditor();
+      if (operation.kind !== "complete") closeEditor();
     } catch (error) {
       const rejected =
         error instanceof ApiError && error.status >= 400 && error.status < 500;
@@ -243,6 +270,7 @@ function TaskBoard({ profile }: { profile: Profile }) {
       busyRef.current = false;
       setBusy(false);
     }
+    setLoading(true);
     await load();
   }
 
@@ -253,92 +281,204 @@ function TaskBoard({ profile }: { profile: Profile }) {
   const items = view === "day" ? due : (data?.items ?? []);
   const locked = busy || !!pending || loading;
   const current = data?.date === selectedDate;
-  return (
-    <div className="tasks-board">
-      <div className="tasks-toolbar">
-        <div className="tasks-views" role="group" aria-label={t.title}>
-          <button
-            className="quiet"
-            aria-pressed={view === "day"}
-            onClick={() => setView("day")}
-          >
-            {t.scheduled}
-          </button>
-          <button
-            className="quiet"
-            aria-pressed={view === "all"}
-            onClick={() => setView("all")}
-          >
-            {t.all}
-          </button>
-        </div>
-        <button
-          className="icon-button"
-          aria-label={t.refresh}
-          disabled={busy || loading}
-          onClick={() => void load()}
-        >
-          <RefreshCw size={20} aria-hidden="true" />
-        </button>
-      </div>
-
-      <div className="tasks-date-row">
-        <label>
-          {t.date}
-          <input
-            type="date"
-            value={selectedDate}
-            max={today}
-            required
-            disabled={busy || loading}
-            onChange={(event) => {
-              if (event.target.value) {
-                setDate(event.target.value);
-                setNotice("");
-              }
-            }}
-          />
-        </label>
-        <button
-          className="quiet"
-          disabled={busy || loading}
-          onClick={() => setDate("")}
-        >
-          {t.today}
-        </button>
-      </div>
+  function selectDate(value: string) {
+    const next = value === today ? "" : value;
+    if (next !== date) {
+      setLoading(true);
+      setDate(next);
+    }
+    setNotice("");
+  }
+  function refresh() {
+    if (busyRef.current) return;
+    setLoading(true);
+    void load();
+  }
+  const locale = lang === "uk" ? "uk-UA" : "en-GB";
+  const formatDate = (value: string, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }).format(
+      new Date(`${value}T12:00:00Z`),
+    );
+  const week = weekDates(selectedDate);
+  const percentage = due.length
+    ? Math.round((completed / due.length) * 100)
+    : 0;
+  const feedback = (
+    <>
       {fault && (
         <p className="feedback error" role="alert">
           {fault}
         </p>
       )}
       {pending && !busy && (
-        <p className="feedback error" role="alert">
-          {t.unknown}
-          <button
-            className="quiet"
-            disabled={busy || loading}
-            onClick={() => void mutate(pending, true)}
-          >
-            {t.retry}
-          </button>
-        </p>
+        <div className="feedback error tasks-recovery" role="alert">
+          <p>{t.unknown}</p>
+          <div>
+            <button
+              className="quiet"
+              disabled={busy || loading}
+              onClick={refresh}
+            >
+              <RefreshCw size={18} aria-hidden="true" />
+              {t.refresh}
+            </button>
+            <button
+              className="button secondary"
+              disabled={busy || loading}
+              onClick={() => void mutate(pending, true)}
+            >
+              {t.retry}
+            </button>
+          </div>
+        </div>
       )}
-      {notice && (
-        <p className="feedback success" role="status">
-          {notice}
-        </p>
-      )}
-      {loading && (
-        <p className="tasks-loading" role="status">
-          {t.loading}
-        </p>
-      )}
+    </>
+  );
+  return (
+    <div className="tasks-board">
+      <section className="tasks-overview" aria-label={t.dayPlan}>
+        <div className="tasks-day-heading">
+          <h1>
+            {selectedDate === today
+              ? t.today
+              : formatDate(selectedDate, { weekday: "long" })}
+          </h1>
+          <p>
+            <time dateTime={selectedDate}>
+              {formatDate(selectedDate, {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </time>
+          </p>
+          <span className="tasks-day-note">
+            {data && current
+              ? due.length && completed === due.length
+                ? t.allDone
+                : `${t.remaining} · ${due.length - completed}`
+              : t.loading}
+          </span>
+        </div>
+        <div
+          className="tasks-progress"
+          role="progressbar"
+          aria-label={t.progress}
+          aria-valuenow={current ? completed : 0}
+          aria-valuemin={0}
+          aria-valuemax={due.length || 1}
+          aria-valuetext={`${current ? completed : 0} / ${due.length} ${t.progress}`}
+        >
+          <svg viewBox="0 0 80 80" aria-hidden="true">
+            <circle className="tasks-progress-track" cx="40" cy="40" r="34" />
+            <circle
+              className="tasks-progress-fill"
+              cx="40"
+              cy="40"
+              r="34"
+              pathLength="100"
+              strokeDasharray="100"
+              strokeDashoffset={100 - (current ? percentage : 0)}
+            />
+          </svg>
+          <span aria-hidden="true">
+            <strong>
+              {current ? completed : 0}
+              <small>/{due.length}</small>
+            </strong>
+          </span>
+        </div>
+      </section>
 
-      {!editor && (
+      <section className="tasks-calendar" aria-label={t.date}>
+        <div className="tasks-calendar-heading">
+          <button
+            className="quiet tasks-calendar-trigger"
+            disabled={busy || loading}
+            aria-label={t.chooseDate}
+            onClick={(event) => {
+              editorTrigger.current = event.currentTarget;
+              setCalendarDate(selectedDate);
+              setEditor({ kind: "date" });
+            }}
+          >
+            <CalendarDays size={18} aria-hidden="true" />
+            {formatDate(selectedDate, { month: "long", year: "numeric" })}
+          </button>
+          <div className="tasks-calendar-actions">
+            {selectedDate !== today && (
+              <button
+                className="quiet"
+                disabled={busy || loading}
+                onClick={() => {
+                  selectDate("");
+                }}
+              >
+                {t.today}
+              </button>
+            )}
+            <button
+              className="icon-button"
+              aria-label={t.previousWeek}
+              disabled={busy || loading}
+              onClick={() => {
+                selectDate(shiftDate(selectedDate, -7));
+              }}
+            >
+              <ChevronLeft size={20} aria-hidden="true" />
+            </button>
+            <button
+              className="icon-button"
+              aria-label={t.nextWeek}
+              disabled={busy || loading || week[6] >= today}
+              onClick={() => {
+                selectDate(
+                  shiftDate(selectedDate, 7) > today
+                    ? ""
+                    : shiftDate(selectedDate, 7),
+                );
+              }}
+            >
+              <ChevronRight size={20} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className="tasks-week">
+          {week.map((day) => (
+            <button
+              key={day}
+              className="tasks-day"
+              aria-pressed={day === selectedDate}
+              aria-current={day === today ? "date" : undefined}
+              aria-label={formatDate(day, { dateStyle: "full" })}
+              disabled={busy || loading || day > today}
+              onClick={() => {
+                selectDate(day);
+              }}
+            >
+              <span>{formatDate(day, { weekday: "short" })}</span>
+              <strong>{Number(day.slice(-2))}</strong>
+              <i aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="tasks-toolbar">
+        <div className="tasks-views" role="group" aria-label={t.title}>
+          <button aria-pressed={view === "day"} onClick={() => setView("day")}>
+            {t.scheduled}
+            {data && current && <span>{due.length}</span>}
+          </button>
+          <button aria-pressed={view === "all"} onClick={() => setView("all")}>
+            {t.all}
+            {data && <span>{data.items.length}</span>}
+          </button>
+        </div>
         <button
           ref={addButton}
           className="button primary tasks-add"
+          aria-label={t.add}
           disabled={locked}
           onClick={() => {
             editorTrigger.current = addButton.current;
@@ -349,134 +489,47 @@ function TaskBoard({ profile }: { profile: Profile }) {
           }}
         >
           <Plus size={20} aria-hidden="true" />
-          {t.add}
+          <span>{t.add}</span>
         </button>
-      )}
+      </div>
 
-      {editor && (
-        <form
-          className="panel tasks-form"
-          aria-label={editor.kind === "create" ? t.add : t.edit}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && !busy) closeEditor();
-          }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (editor.kind === "create") {
-              const input: CreateTask = {
-                requestId: crypto.randomUUID(),
-                name,
-                intervalDays,
-                startDate,
-              };
-              void mutate({ kind: "create", input });
-            } else {
-              const input: RenameTask = { name, version: editor.task.version };
-              void mutate({ kind: "rename", id: editor.task.id, input });
-            }
-          }}
-        >
-          <div className="section-heading">
-            <h2>{editor.kind === "create" ? t.add : t.edit}</h2>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label={t.cancel}
-              disabled={busy}
-              onClick={closeEditor}
-            >
-              <X size={20} aria-hidden="true" />
-            </button>
+      <div
+        className="tasks-scroll-region"
+        tabIndex={0}
+        role="region"
+        aria-label={view === "day" ? t.scheduled : t.all}
+        aria-busy={loading}
+      >
+        {!editor && feedback}
+        {loading && (!data || !current) ? (
+          <div className="tasks-skeleton" role="status">
+            <span className="sr-only">{t.loading}</span>
+            {[1, 2, 3, 4].map((row) => (
+              <div key={row} aria-hidden="true">
+                <i />
+                <span />
+              </div>
+            ))}
           </div>
-          <label>
-            {t.name}
-            <input
-              ref={nameInput}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={t.namePlaceholder}
-              required
-              maxLength={120}
-              disabled={locked}
-            />
-          </label>
-          {editor.kind === "create" ? (
-            <>
-              <label>
-                {t.repeat}
-                <select
-                  value={intervalDays}
-                  disabled={locked}
-                  onChange={(event) =>
-                    setIntervalDays(Number(event.target.value))
+        ) : data && current ? (
+          items.length ? (
+            <ul className="tasks-list">
+              {items.map((task) => (
+                <li
+                  key={task.id}
+                  className={
+                    task.completed && view === "day"
+                      ? "tasks-row is-complete"
+                      : "tasks-row"
                   }
                 >
-                  <option value={1}>{t.daily}</option>
-                  <option value={2}>{t.twoDays}</option>
-                  <option value={3}>{t.threeDays}</option>
-                  <option value={7}>{t.weekly}</option>
-                </select>
-              </label>
-              <label>
-                {t.start}
-                <input
-                  type="date"
-                  value={startDate}
-                  required
-                  disabled={locked}
-                  onChange={(event) => setStartDate(event.target.value)}
-                />
-              </label>
-              <p>{t.scheduleHint}</p>
-            </>
-          ) : (
-            <p>{t.renameHint}</p>
-          )}
-          <div className="tasks-form-actions">
-            <button type="submit" className="button primary" disabled={locked}>
-              {t.save}
-            </button>
-            <button
-              type="button"
-              className="quiet"
-              disabled={busy}
-              onClick={closeEditor}
-            >
-              {t.cancel}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {data && current && (
-        <section
-          className="panel tasks-list"
-          aria-label={view === "day" ? t.scheduled : t.all}
-          aria-busy={loading}
-        >
-          {view === "day" && due.length > 0 && (
-            <div className="tasks-progress">
-              <span>
-                {completed} / {due.length} {t.progress}
-              </span>
-              <progress
-                value={completed}
-                max={due.length}
-                aria-label={t.progress}
-              />
-            </div>
-          )}
-          {items.length ? (
-            <ul>
-              {items.map((task) => (
-                <li key={task.id}>
                   {view === "day" ? (
                     <button
                       className="tasks-check"
                       role="checkbox"
                       aria-checked={task.completed}
                       aria-label={`${task.completed ? t.unmark : t.mark}: ${task.name}`}
-                      disabled={locked || !!editor || !task.canComplete}
+                      disabled={locked || !task.canComplete}
                       onClick={() => {
                         const input: TaskCompletion = {
                           date: data.date,
@@ -486,78 +539,293 @@ function TaskBoard({ profile }: { profile: Profile }) {
                         void mutate({ kind: "complete", id: task.id, input });
                       }}
                     >
-                      {task.completed && <Check size={22} aria-hidden="true" />}
+                      <span>
+                        {task.completed && (
+                          <Check
+                            size={17}
+                            strokeWidth={2.5}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </span>
                     </button>
                   ) : (
-                    <CircleCheck size={22} aria-hidden="true" />
+                    <span className="tasks-repeat-icon">
+                      <Repeat2 size={19} aria-hidden="true" />
+                    </span>
                   )}
                   <div className="tasks-task-copy">
-                    <span
-                      className={
-                        view === "day" && task.completed
-                          ? "tasks-done"
-                          : undefined
-                      }
-                    >
-                      {task.name}
-                    </span>
+                    <span className="tasks-task-name">{task.name}</span>
                     <p>
-                      {frequency(task.intervalDays, t)} ·{" "}
-                      <time dateTime={task.startDate}>
-                        {new Intl.DateTimeFormat(
-                          lang === "uk" ? "uk-UA" : "en-GB",
-                          { dateStyle: "medium", timeZone: "UTC" },
-                        ).format(new Date(`${task.startDate}T12:00:00Z`))}
-                      </time>
+                      {frequency(task.intervalDays, t)}
+                      {view === "all" && (
+                        <>
+                          {" "}
+                          · {t.starting}{" "}
+                          <time dateTime={task.startDate}>
+                            {formatDate(task.startDate, {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </time>
+                        </>
+                      )}
                     </p>
-                    {view === "day" && (
-                      <small>{task.completed ? t.done : t.notDone}</small>
-                    )}
                   </div>
-                  <div className="tasks-row-actions">
-                    <button
-                      className="icon-button"
-                      aria-label={`${t.edit}: ${task.name}`}
-                      disabled={locked || !!editor}
-                      onClick={(event) => {
-                        editorTrigger.current = event.currentTarget;
-                        setName(task.name);
-                        setEditor({ kind: "rename", task });
-                      }}
-                    >
-                      <PencilLine size={20} aria-hidden="true" />
-                    </button>
-                    <button
-                      className="icon-button danger"
-                      aria-label={`${t.delete}: ${task.name}`}
-                      disabled={locked || !!editor}
-                      onClick={() => {
-                        if (window.confirm(t.deleteConfirm))
-                          void mutate({
-                            kind: "delete",
-                            id: task.id,
-                            version: task.version,
-                          });
-                      }}
-                    >
-                      <Trash2 size={20} aria-hidden="true" />
-                    </button>
-                  </div>
+                  <button
+                    className="icon-button tasks-more"
+                    aria-label={`${t.details}: ${task.name}`}
+                    disabled={locked}
+                    onClick={(event) => {
+                      editorTrigger.current = event.currentTarget;
+                      setName(task.name);
+                      setEditor({ kind: "manage", task });
+                    }}
+                  >
+                    <MoreHorizontal size={22} aria-hidden="true" />
+                  </button>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="empty">
-              <CircleCheck
-                className="empty-icon"
-                size={32}
-                aria-hidden="true"
-              />
+            <div className="tasks-empty">
+              <span>
+                <CircleCheck size={30} strokeWidth={1.5} aria-hidden="true" />
+              </span>
               <h2>{data.items.length ? t.restTitle : t.emptyTitle}</h2>
               <p>{data.items.length ? t.restBody : t.emptyBody}</p>
+              <button
+                className="quiet"
+                disabled={locked}
+                onClick={() => addButton.current?.click()}
+              >
+                <Plus size={18} aria-hidden="true" />
+                {t.add}
+              </button>
             </div>
+          )
+        ) : null}
+      </div>
+      <div className="tasks-board-footer">
+        <span role="status" className="tasks-save-status">
+          {busy ? t.loading : notice || (loading ? t.loading : "")}
+        </span>
+        <button className="quiet" disabled={busy || loading} onClick={refresh}>
+          <RefreshCw size={15} aria-hidden="true" />
+          {t.refresh}
+        </button>
+      </div>
+
+      {editor && (
+        <TaskDialog
+          title={
+            editor.kind === "create"
+              ? t.newTask
+              : editor.kind === "delete"
+                ? t.deleteTitle
+                : editor.kind === "date"
+                  ? t.chooseDate
+                  : t.details
+          }
+          closeLabel={t.cancel}
+          busy={busy}
+          onClose={closeEditor}
+        >
+          {editor.kind === "date" ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                selectDate(calendarDate);
+                closeEditor();
+              }}
+            >
+              <div className="tasks-dialog-body">
+                <label>
+                  {t.date}
+                  <input
+                    data-dialog-focus
+                    ref={dateInput}
+                    type="date"
+                    value={calendarDate}
+                    max={today}
+                    required
+                    onChange={(event) => setCalendarDate(event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="tasks-dialog-footer">
+                <button
+                  ref={refreshButton}
+                  type="button"
+                  className="quiet"
+                  onClick={() => {
+                    selectDate("");
+                    closeEditor();
+                  }}
+                >
+                  {t.today}
+                </button>
+                <button type="submit" className="button primary">
+                  {t.goToDate}
+                </button>
+              </div>
+            </form>
+          ) : editor.kind === "delete" ? (
+            <div className="tasks-dialog-content">
+              <div className="tasks-dialog-body">
+                <p className="tasks-delete-name">{editor.task.name}</p>
+                <p>{t.deleteConfirm}</p>
+                {feedback}
+              </div>
+              <div className="tasks-dialog-footer">
+                <button
+                  ref={deleteCancel}
+                  data-dialog-focus
+                  type="button"
+                  className="quiet"
+                  disabled={busy}
+                  onClick={() =>
+                    setEditor({ kind: "manage", task: editor.task })
+                  }
+                >
+                  {t.back}
+                </button>
+                <button
+                  className="button tasks-delete-button"
+                  disabled={locked}
+                  onClick={() =>
+                    void mutate({
+                      kind: "delete",
+                      id: editor.task.id,
+                      version: editor.task.version,
+                    })
+                  }
+                >
+                  <Trash2 size={18} aria-hidden="true" />
+                  {t.delete}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (editor.kind === "create") {
+                  const input: CreateTask = {
+                    requestId: crypto.randomUUID(),
+                    name: name.trim(),
+                    intervalDays,
+                    startDate,
+                  };
+                  void mutate({ kind: "create", input });
+                } else {
+                  const input: RenameTask = {
+                    name: name.trim(),
+                    version: editor.task.version,
+                  };
+                  void mutate({ kind: "rename", id: editor.task.id, input });
+                }
+              }}
+            >
+              <div className="tasks-dialog-body tasks-form">
+                <label>
+                  {t.name}
+                  <input
+                    data-dialog-focus
+                    ref={nameInput}
+                    value={name}
+                    required
+                    maxLength={120}
+                    disabled={locked}
+                    placeholder={t.namePlaceholder}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </label>
+                {editor.kind === "create" ? (
+                  <>
+                    <fieldset className="tasks-frequency" disabled={locked}>
+                      <legend>{t.repeat}</legend>
+                      {[1, 2, 3, 7].map((days) => (
+                        <label key={days}>
+                          <input
+                            type="radio"
+                            name="interval"
+                            value={days}
+                            checked={intervalDays === days}
+                            onChange={() => setIntervalDays(days)}
+                          />
+                          <span>{frequency(days, t)}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <label>
+                      {t.start}
+                      <input
+                        type="date"
+                        value={startDate}
+                        required
+                        disabled={locked}
+                        onChange={(event) => setStartDate(event.target.value)}
+                      />
+                    </label>
+                    <p className="tasks-form-hint">{t.scheduleHint}</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="tasks-schedule-detail">
+                      <Repeat2 size={19} aria-hidden="true" />
+                      <div>
+                        <strong>
+                          {frequency(editor.task.intervalDays, t)}
+                        </strong>
+                        <p>
+                          {t.starting}{" "}
+                          {formatDate(editor.task.startDate, {
+                            dateStyle: "long",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="tasks-form-hint">{t.renameHint}</p>
+                  </>
+                )}
+                {feedback}
+              </div>
+              <div className="tasks-dialog-footer">
+                {editor.kind === "manage" ? (
+                  <button
+                    type="button"
+                    className="quiet danger"
+                    disabled={locked}
+                    onClick={() =>
+                      setEditor({ kind: "delete", task: editor.task })
+                    }
+                  >
+                    <Trash2 size={18} aria-hidden="true" />
+                    {t.delete}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="quiet"
+                    disabled={busy}
+                    onClick={closeEditor}
+                  >
+                    {t.cancel}
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="button primary"
+                  disabled={locked || !name.trim()}
+                >
+                  <Check size={18} aria-hidden="true" />
+                  {t.save}
+                </button>
+              </div>
+            </form>
           )}
-        </section>
+        </TaskDialog>
       )}
     </div>
   );
